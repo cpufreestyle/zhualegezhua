@@ -185,10 +185,7 @@ bus.on('round:end', ({ reason }) => {
 
 bus.on('ui:tap', ({ tag, state }) => {
   if (state === 'start' && tag === 'play') {
-    screens.hide();
-    screenState = 'play';
-    thrower.setEnabled(true);
-    startRound();
+    startRound(); // 内部已含 hide/置 play 态/启用投掷 + 清场重启 AR
   } else if (state === 'start' && tag === 'dex') {
     screens.show('dex', save);
   } else if (state === 'dex' && tag === 'back') {

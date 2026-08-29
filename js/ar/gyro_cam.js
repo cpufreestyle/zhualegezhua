@@ -44,7 +44,17 @@ function createGyroAR(canvas, THREE, renderer, scene, camera) {
       canvas.requestAnimationFrame(onFrame);
     },
     start,
-    stop() { wx.offDeviceMotionChange && wx.offDeviceMotionChange(); wx.stopDeviceMotionListening && wx.stopDeviceMotionListening(); },
+    stop() {
+      wx.offDeviceMotionChange && wx.offDeviceMotionChange();
+      wx.stopDeviceMotionListening && wx.stopDeviceMotionListening();
+      // 每局新建 AR 会话：回收天空球/地面网格，否则随局数累积泄漏 GPU 资源
+      scene.remove(sky);
+      sky.geometry.dispose();
+      sky.material.dispose();
+      scene.remove(floor);
+      floor.geometry.dispose();
+      floor.material.dispose();
+    },
   };
 }
 module.exports = { createGyroAR };

@@ -1,5 +1,6 @@
 // js/ui/screens.js — HUD 三屏（开始/图鉴/结算）：离屏 Canvas → CanvasTexture → 全屏正交 quad 透叠
 const { CREATURES } = require('../render/creatures.js');
+const eco = require('../meta/economy.js'); // Node-safe：判断每日分享是否已领
 
 function createScreens({ THREE, bus, config, canvas }) {
   const info = wx.getSystemInfoSync();
@@ -43,8 +44,8 @@ function createScreens({ THREE, bus, config, canvas }) {
     ctx.fillText(text, x, y);
   }
 
-  function button(x, y, w, h, text, tag) { // 画按钮并记录矩形
-    ctx.fillStyle = '#ffd166';
+  function button(x, y, w, h, text, tag, fill) { // 画按钮并记录矩形（fill 可选：置灰态用）
+    ctx.fillStyle = fill || '#ffd166';
     ctx.fillRect(x, y, w, h);
     label(text, x + w / 2, y + h / 2, 17, '#333');
     buttons.push({ x, y, w, h, tag });
@@ -73,7 +74,10 @@ function createScreens({ THREE, bus, config, canvas }) {
       label(n > 0 ? '已捕捉 ' + n : '未捕捉', col * colW + colW - px(14), y, 14, n > 0 ? '#ffd166' : '#aaaaaa', 'right');
     });
     const y2 = H * 0.82;
-    button(W * 0.06, y2, W * 0.42, px(46), '分享得' + config.economy.dailyShareBonus + '球', 'share');
+    const claimed = !eco.canDailyShare(save, new Date().toISOString());
+    button(W * 0.06, y2, W * 0.42, px(46),
+      claimed ? '今日已领' : '分享得' + config.economy.dailyShareBonus + '球',
+      'share', claimed ? '#9aa0a6' : undefined); // 已领置灰提示，tag 不变仍可重分享（收益不发）
     button(W * 0.52, y2, W * 0.42, px(46), '返回', 'back');
   }
 

@@ -9,18 +9,26 @@ const CREATURES = [
   { id: 'star_dragon', name: '星星龙', rarity: 'legendary', color: 0xb892ff, glbUrl: null },
 ];
 function byId(id) { return CREATURES.find((c) => c.id === id); }
+
+// 共享几何体/材质缓存：精灵每局重复生成销毁，几何与材质按颜色复用，避免 GPU 缓冲泄漏
+let bodyGeo = null; // 懒创建，首次用到时才建
+let earGeo = null;
+const matCache = new Map(); // color hex → 共享材质（身体/耳朵同色共用）
+
 function createPlaceholder(THREE, scene, creature, center) {
+  if (!bodyGeo) bodyGeo = new THREE.SphereGeometry(0.18, 16, 16);
+  if (!earGeo) earGeo = new THREE.SphereGeometry(0.06, 8, 8);
+  let mat = matCache.get(creature.color);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({ color: creature.color });
+    matCache.set(creature.color, mat);
+  }
   const g = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.SphereGeometry(0.18, 16, 16),
-    new THREE.MeshBasicMaterial({ color: creature.color })
-  );
+  const body = new THREE.Mesh(bodyGeo, mat);
   body.position.y = 0.18;
   g.add(body);
-  const earGeo = new THREE.SphereGeometry(0.06, 8, 8);
-  const earMat = new THREE.MeshBasicMaterial({ color: creature.color });
   [-0.1, 0.1].forEach((x) => {
-    const ear = new THREE.Mesh(earGeo, earMat);
+    const ear = new THREE.Mesh(earGeo, mat);
     ear.position.set(x, 0.34, 0);
     g.add(ear);
   });
