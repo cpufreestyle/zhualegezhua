@@ -10,7 +10,8 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
   const state = {
     swipeStart: null, ball: null, vel: null, aimStartAt: 0, target: null,
     enabled: true, // Task 14 的 HUD 显示时置 false，吞掉触摸
-    prev: new THREE.Vector3(), tmpA: new THREE.Vector3(), tmpB: new THREE.Vector3(),
+    groundY: 0.02,
+    prev: new THREE.Vector3(), tmpA: new THREE.Vector3(), tmpB: new THREE.Vector3(), tmpC: new THREE.Vector3(),
   };
 
   function spawnBall() {
@@ -39,7 +40,8 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
     state.swipeStart = null;
     const v = computeThrowVelocity(swipe, config);
     if (!v || !state.target) return;
-    state.vel = new THREE.Vector3(v.vx, v.vy, v.vz);
+    const camQuat = camera.getWorldQuaternion(new THREE.Quaternion());
+    state.vel = new THREE.Vector3(v.vx, v.vy, -v.vz).applyQuaternion(camQuat); // 相机系：屏幕上方 = 相机前方(-z)，随设备朝向
     state.ball = spawnBall();
     state.aimStartAt = Date.now(); // 瞄准圈计时随出手重置
     bus.emit('ball:thrown');
@@ -58,6 +60,7 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
   return {
     setTarget(t) { state.target = t; },
     setEnabled(v) { state.enabled = v; },
+    setGroundY(y) { state.groundY = y; },
     hasBallInFlight() { return !!state.ball; },
     update(dtMs) {
       if (!state.ball) return;
@@ -73,7 +76,7 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
 
       const t = state.target;
       if (t) {
-        const c = t.obj.getWorldPosition(state.tmpB);
+        const c = t.obj.getWorldPosition(state.tmpC);
         if (sweptHit(state.prev, b.position, c, t.radius)) {
           // 命中：球与精灵的屏幕投影距离 → 收缩圈分区
           const pa = state.tmpA.copy(b.position).project(camera);
@@ -87,7 +90,7 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
           return;
         }
       }
-      if (b.position.y <= 0.02) {
+      if (b.position.y <= state.groundY) {
         bus.emit('ball:ground');
         scene.remove(b);
         state.ball = null; state.vel = null;

@@ -25,6 +25,7 @@ const store = createStorage(wx, config);
 let save = store.load();
 let creatures = [];      // [{data, obj, ai, radius}]
 let roundOver = false;
+let waveSpawned = false;
 const thrower = createThrowSystem({ THREE, scene, camera, canvas, config, bus });
 const cameraWorld = new THREE.Vector3();
 
@@ -45,6 +46,7 @@ function spawnWave() {
   creatures = [];
   const center = anchorCenter();
   if (!center) return;
+  thrower.setGroundY(center.y + 0.02);
   rollEncounter(CREATURES, Math.random, config).forEach((data) => {
     const home = {
       x: center.x + (Math.random() - 0.5) * 0.6,
@@ -55,12 +57,14 @@ function spawnWave() {
     const ai = createRuntime(data, { x: home.x, y: home.y, z: home.z }, Math.random, config);
     creatures.push({ data, obj, ai, radius: 0.22 });
   });
+  waveSpawned = true;
 }
 
 bus.on('ball:thrown', () => {
-  save.stats.throws += 1;
   const r = eco.spendBall(save);
+  if (!r.ok) return;
   save = r.state;
+  save.stats.throws += 1;
   store.save(save);
 });
 
@@ -92,7 +96,7 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
 });
 
 bus.on('ball:ground', () => {});
-bus.on('round:end', () => { console.log('[round] end — balls:', save.balls, 'caught:', save.stats.catches); }); // Task 14 换结算 UI
+bus.on('round:end', () => { thrower.setEnabled(false); console.log('[round] end — balls:', save.balls, 'caught:', save.stats.catches); }); // Task 14 换结算 UI
 
 ar.start().then(({ mode }) => {
   console.log('AR mode:', mode);
@@ -117,7 +121,7 @@ ar.start().then(({ mode }) => {
 
     thrower.update(33);
 
-    if (!roundOver && (creatures.length === 0 || (save.balls <= 0 && !thrower.hasBallInFlight()))) {
+    if (!roundOver && waveSpawned && (creatures.length === 0 || (save.balls <= 0 && !thrower.hasBallInFlight()))) {
       roundOver = true;
       bus.emit('round:end');
     }
