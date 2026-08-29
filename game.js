@@ -3,7 +3,7 @@ const config = require('./js/config.js');
 const { createThree } = require('./js/render/three_adapter.js');
 const { createARContext } = require('./js/ar/ar_context.js');
 const { createCreature, CREATURES } = require('./js/render/creatures.js');
-const { updateFades, prefetchCreatures } = require('./js/render/gltf_loader.js');
+const { updateFades, prefetchCreatures, disposeCreature } = require('./js/render/gltf_loader.js');
 const { createBus } = require('./js/core/events.js');
 const { rollEncounter } = require('./js/meta/spawn.js');
 const { createRuntime, reactToFailedCapture } = require('./js/game/creature_ai.js');
@@ -49,7 +49,7 @@ function anchorCenter() {
 }
 
 function spawnWave() {
-  creatures.forEach((c) => scene.remove(c.obj));
+  creatures.forEach((c) => { disposeCreature(c.obj); scene.remove(c.obj); }); // 先回收 GLB GPU 资源再移除
   creatures = [];
   const center = anchorCenter();
   if (!center) return;
@@ -80,10 +80,10 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
     ar.loop(() => {
       if (gen !== loopGen) return; // 旧会话遗留回调：直接吞掉
       const now = Date.now();
-      const dtMs = Math.min(100, now - lastT); // 真实帧间隔：切后台巨帧钳到 100ms
+      acc += Math.min(100, now - lastT); // 巨帧钳到 100ms（切后台恢复等）
       lastT = now;
-      acc += dtMs;
-      if (acc < frameMs) return; // 未满一帧：本次回调整体放行，游戏体/渲染/相机底图一并定格
+      if (acc < frameMs) return; // FPS 上限：不足一个渲染周期直接跳过
+      const dtMs = Math.min(100, acc); // 本帧推进量 = 距上次“渲染帧”的累计时长
       acc = 0;
 
       if (creatures.length === 0 && !roundOver) spawnWave();
@@ -158,12 +158,14 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
     save = bonus.state;
     creatures = creatures.filter((x) => x !== c);
     const pos = c.obj.getWorldPosition(new THREE.Vector3()); // 移除前取世界坐标：粒子在其处爆发
+    disposeCreature(c.obj); // 回收 GLB GPU 资源后再移除
     scene.remove(c.obj);
     bus.emit('creature:caught', { id, zone, isNew, gained: bonus.gained, pos });
   } else {
     const { flee } = reactToFailedCapture(c.data, Math.random, config);
     if (flee) {
       creatures = creatures.filter((x) => x !== c);
+      disposeCreature(c.obj); // 回收 GLB GPU 资源后再移除
       scene.remove(c.obj);
       bus.emit('creature:fled', { id });
     } else {
@@ -174,7 +176,7 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
 });
 
 function startRound() { // 开新对局：清场 → 补球 → 重启 AR 会话
-  creatures.forEach((c) => scene.remove(c.obj)); // 清掉上局残留精灵，否则回合结束条件死锁
+  creatures.forEach((c) => { disposeCreature(c.obj); scene.remove(c.obj); }); // 清掉上局残留精灵（先回收 GLB GPU 资源），否则回合结束条件死锁
   creatures = [];
   roundOver = false;
   waveSpawned = false;

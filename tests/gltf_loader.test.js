@@ -11,7 +11,7 @@ const { registerGLTFLoader } = require('../libs/gltf-loader.js');
 const { CREATURES, createPlaceholder, createCreature } = require('../js/render/creatures.js');
 const config = require('../js/config.js');
 
-const FINAL_SCALE = config.creature.scale * 1.3; // 模型最终缩放（与 gltf_loader.js 的 MODEL_SCALE 同源）
+const FINAL_SCALE = config.creature.scale * config.creature.glbScaleFactor; // 模型最终缩放（与 gltf_loader.js 的 MODEL_SCALE 同源）
 
 // 构造最小 mock THREE：GLTFLoader.load 同步触发回调（诚实 mock：不模拟网络时序，
 // 只断言 attach/淡入/预取对回调的响应行为）。类实例不参与真实渲染，几何/材质仅作标记。
@@ -20,11 +20,13 @@ function makeMockTHREE(mode) {
   class Object3D {
     constructor() {
       this.children = [];
+      this.userData = {}; // 与 THREE.Object3D 同构：生产代码用它登记 glbModel
       this.scale = { v: 1, setScalar(s) { this.v = s; } };
       this.position = { x: 0, y: 0, z: 0, set() {} };
     }
     add(o) { this.children.push(o); return this; }
     remove(o) { const i = this.children.indexOf(o); if (i >= 0) this.children.splice(i, 1); }
+    traverse(fn) { fn(this); this.children.forEach((c) => { if (c.traverse) c.traverse(fn); }); } // 与 Object3D.traverse 同构：先自身后递归子体
   }
   class Group extends Object3D {}
   class Mesh extends Object3D {
@@ -163,4 +165,40 @@ test('prefetchCreatures：按清单预取剩余 url 且幂等', () => {
   gltf.prefetchCreatures(THREE); // Set 去重：第二次不重复发起
   assert.strictEqual(calls.loads, expected);
   // 当前清单全为空串时 expected=0（纯占位体阶段零预取）；清单回填后自动转为真实预取
+});
+
+test('disposeCreature：回收 glbModel 的 GPU 资源，不碰占位体共享缓存；config 调参被消费', () => {
+  // 调参入 config 后仍被消费：导出常量与 config.creature 同源
+  assert.strictEqual(gltf.MODEL_SCALE, config.creature.scale * config.creature.glbScaleFactor);
+  assert.strictEqual(gltf.FADE_MS, config.creature.fadeMs);
+
+  const { THREE } = makeMockTHREE('ok');
+  const scene = makeScene();
+  const group = createPlaceholder(THREE, scene, CREATURES[0], { x: 0, y: 0, z: 0 });
+  const phGeo = group.children[0].geometry; // 占位体共享几何/材质（creatures.js 缓存）
+  const phMat = group.children[0].material;
+  let phDisposed = 0;
+  phGeo.dispose = () => { phDisposed += 1; };
+  phMat.dispose = () => { phDisposed += 1; };
+
+  gltf.attachCreatureGLB(THREE, group, 'https://cdn.test/d.glb');
+  const model = group.userData.glbModel;
+  assert.ok(model); // 成功路径登记 glbModel
+
+  const disposed = { geo: 0, mat: 0, tex: 0 };
+  const tex = { isTexture: true, dispose() { disposed.tex += 1; } };
+  const mat = { map: tex, dispose() { disposed.mat += 1; } };
+  const geo = { dispose() { disposed.geo += 1; } };
+  model.add(new THREE.Mesh(geo, mat)); // GLB 模型内含网格：验证几何/材质/纹理逐层回收
+
+  gltf.disposeCreature(group);
+  assert.deepStrictEqual(disposed, { geo: 1, mat: 1, tex: 1 }); // GLB 资源已释放
+  assert.strictEqual(phDisposed, 0); // 占位体共享缓存不受影响（不在 glbModel 之下）
+  assert.strictEqual(group.userData.glbModel, null); // 已置空
+
+  gltf.disposeCreature(group); // 二次调用：守卫早退，幂等
+  assert.deepStrictEqual(disposed, { geo: 1, mat: 1, tex: 1 });
+
+  const bare = createPlaceholder(THREE, scene, CREATURES[1], { x: 0, y: 0, z: 0 });
+  gltf.disposeCreature(bare); // 纯占位体（无 glbModel）：守卫生效不抛错，啥也不释放
 });

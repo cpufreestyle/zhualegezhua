@@ -6,13 +6,14 @@ const { registerGLTFLoader } = require('../../libs/gltf-loader.js');
 let GLB_MANIFEST = {};
 try { GLB_MANIFEST = require('./glb_manifest.js') || {}; } catch (e) { /* Task 15 未产出时回落 */ }
 
-const FADE_MS = 300; // 模型淡入时长
+const FADE_MS = config.creature.fadeMs; // 模型淡入时长
+const LOAD_TIMEOUT_MS = config.creature.loadTimeoutMs; // GLB 加载超时：超时按失败处理，占位体继续顶住
 const warned = { loader: false }; // GLTFLoader 不可用时只告警一次，不刷屏
 
 // 尺寸归一：占位体身体球 r=0.18 圆心 y=0.18（跨度 0~0.36），耳朵顶到 0.40，总高约 0.40；
-// 目标整体高 ≈ config.creature.scale * 1.3 = 0.364。制作管线约定：GLB 以 1 单位高、原点脚底归一，
-// 故缩放系数即目标高，模型底部与占位体球底同贴 group 原点（y=0）。若后续实际 GLB 比例不符，仅需调此常量。
-const MODEL_SCALE = config.creature.scale * 1.3;
+// 目标整体高 ≈ config.creature.scale * config.creature.glbScaleFactor = 0.364。制作管线约定：GLB 以 1 单位高、原点脚底归一，
+// 故缩放系数即目标高，模型底部与占位体球底同贴 group 原点（y=0）。若后续实际 GLB 比例不符，仅需调 config.creature.glbScaleFactor。
+const MODEL_SCALE = config.creature.scale * config.creature.glbScaleFactor;
 
 const fades = [];            // 淡入补间表 {obj, from, to, t, dur}：模块级复用，完成后尾部换入移除，零逐帧分配
 const prefetched = new Set(); // 已开始加载的 url（含失败，避免反复打扰网络）
@@ -42,7 +43,7 @@ function attachCreatureGLB(THREE, group, glbUrl, onDone) {
   const loader = new THREE.GLTFLoader();
   const timer = setTimeout(() => { // 超时按失败处理：r108 DefaultLoadingManager 无 abort，只能放任请求；
     if (loader.manager && loader.manager.abort) loader.manager.abort(); // 占位体继续顶住；模型晚到成功仍会替换（晚到好过不到）
-  }, 10000);
+  }, LOAD_TIMEOUT_MS);
   loader.load(glbUrl, (gltf) => {
     clearTimeout(timer);
     while (group.children.length) group.remove(group.children[0]);
@@ -50,6 +51,7 @@ function attachCreatureGLB(THREE, group, glbUrl, onDone) {
     model.scale.setScalar(0.01); // 淡入起点，首帧不闪大
     model.position.y = 0;
     group.add(model);
+    group.userData.glbModel = model; // 登记模型本体：移除精灵时按此回收 GPU 资源（占位体无此标记，天然不受影响）
     // 补间目标是模型本体而非外层 group：group 定位/寻的由 AI 与投掷系统按原点驱动，保持不动
     fades.push({ obj: model, from: 0.01, to: MODEL_SCALE, t: 0, dur: FADE_MS });
     if (onDone) onDone();
@@ -69,6 +71,23 @@ function updateFades(dtMs) { // 每帧推进淡入（game.js 主循环调用）�
   }
 }
 
+// 释放精灵 GLB 模型的 GPU 资源；占位体共享缓存(creatures.js)不在 glbModel 之下，不受影响
+function disposeCreature(obj) {
+  const model = obj && obj.userData && obj.userData.glbModel;
+  if (!model) return;
+  model.traverse((n) => {
+    if (n.geometry) n.geometry.dispose();
+    if (n.material) {
+      const mats = Array.isArray(n.material) ? n.material : [n.material];
+      mats.forEach((m) => {
+        Object.values(m).forEach((v) => { if (v && v.isTexture) v.dispose(); });
+        m.dispose();
+      });
+    }
+  });
+  obj.userData.glbModel = null;
+}
+
 const noop = () => {};
 function prefetchCreatures(THREE) { // 捕捉当前精灵时预取其余 GLB：命中适配层 HTTP 缓存，下次出场即换模型
   if (!ensureGLTFLoader(THREE)) return;
@@ -83,4 +102,4 @@ function prefetchCreatures(THREE) { // 捕捉当前精灵时预取其余 GLB：�
   });
 }
 
-module.exports = { ensureGLTFLoader, attachCreatureGLB, updateFades, prefetchCreatures, resolveGlbUrl };
+module.exports = { ensureGLTFLoader, attachCreatureGLB, updateFades, prefetchCreatures, resolveGlbUrl, disposeCreature, MODEL_SCALE, FADE_MS };

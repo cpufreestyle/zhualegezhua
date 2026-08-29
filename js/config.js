@@ -9,7 +9,7 @@ module.exports = {
   },
   circle: { r1: 90, r2: 34, periodMs: 1600, zones: { excellent: 0.35, great: 0.7, nice: 1.0 } },
   throw: { gravity: -18, powerScale: 0.012, maxPower: 26, minSwipePx: 24 },
-  creature: { scale: 0.28, wanderRadius: 0.6, wanderIntervalMs: [2000, 4000] },
+  creature: { scale: 0.28, glbScaleFactor: 1.3, fadeMs: 300, loadTimeoutMs: 10000, wanderRadius: 0.6, wanderIntervalMs: [2000, 4000] },
   planes: { scanTimeoutMs: 8000, secondTimeoutMs: 8000 },
   fpsCap: 30,
 };
