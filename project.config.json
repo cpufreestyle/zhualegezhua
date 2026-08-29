@@ -15,7 +15,7 @@
   "setting": { "urlCheck": false, "es6": true, "minified": true },
   "compileType": "miniGame",
   "libVersion": "3.3.4",
-  "appid": "touristappid",
+  "appid": "wx6ac3f5090a6b99c5",
   "projectname": "zhualegezhua",
   "condition": {}
 }
