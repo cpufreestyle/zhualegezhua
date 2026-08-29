@@ -17,6 +17,7 @@ const mods = [
   './js/game/catch_resolver.js',
   './js/game/hit_circles.js',
   './js/game/ballistics.js',
+  './js/game/creature_ai.js',
   './js/render/creatures.js',
 ];
 let failed = 0;
