@@ -23,6 +23,7 @@ test('退化半径（0/NaN）→ none', () => {
   assert.strictEqual(hc.judgeHit(10, 0, config), 'none');
   assert.strictEqual(hc.judgeHit(10, NaN, config), 'none');
   assert.strictEqual(hc.judgeHit(10, Infinity, config), 'none');
+  assert.strictEqual(hc.judgeHit(10, -2, config), 'none'); // 负半径也是退化输入
 });
 
 test('分区边界为闭区间（≤）', () => {

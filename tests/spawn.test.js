@@ -25,3 +25,8 @@ test('加权：纯 common 表永远返回 common', () => {
   const rarity = spawn.weightedPick({ common: 1, rare: 0, legendary: 0 }, Math.random);
   assert.strictEqual(rarity, 'common');
 });
+
+test('权重表含 CREATURES 没有的稀有度 → 跳过不产生 undefined', () => {
+  const list = spawn.rollEncounter(CREATURES, Math.random, { ...config, spawn: { ...config.spawn, weights: { common: 0.7, rare: 0.2, epic: 0.1 } } });
+  list.forEach((c) => assert.ok(c, 'undefined 混入了刷怪结果'));
+});
