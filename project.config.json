@@ -1,0 +1,18 @@
+{
+  "description": "抓了个抓 - AR 捕捉微信小游戏",
+  "packOptions": {
+    "ignore": [
+      { "type": "folder", "value": ".git" },
+      { "type": "folder", "value": "tests" },
+      { "type": "folder", "value": "scripts" },
+      { "type": "file", "value": "package.json" },
+      { "type": "file", "value": ".gitignore" }
+    ]
+  },
+  "setting": { "urlCheck": false, "es6": true, "minified": true },
+  "compileType": "miniGame",
+  "libVersion": "3.3.4",
+  "appid": "touristappid",
+  "projectname": "zhualegezhua",
+  "condition": {}
+}
