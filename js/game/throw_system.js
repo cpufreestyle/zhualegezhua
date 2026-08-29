@@ -62,6 +62,7 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
     setEnabled(v) { state.enabled = v; },
     setGroundY(y) { state.groundY = y; },
     hasBallInFlight() { return !!state.ball; },
+    getAimStartAt() { return state.aimStartAt; }, // 瞄准圈可视化与判定共用同一时钟起点
     update(dtMs) {
       if (!state.ball) return;
       const dt = dtMs / 1000;

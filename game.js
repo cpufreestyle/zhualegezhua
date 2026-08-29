@@ -4,6 +4,7 @@ const { createThree } = require('./js/render/three_adapter.js');
 const { createARContext } = require('./js/ar/ar_context.js');
 const { createCreature, CREATURES } = require('./js/render/creatures.js');
 const { updateFades, prefetchCreatures, disposeCreature } = require('./js/render/gltf_loader.js');
+const { createAimRing } = require('./js/render/aim_ring.js');
 const { createBus } = require('./js/core/events.js');
 const { rollEncounter } = require('./js/meta/spawn.js');
 const { createRuntime, reactToFailedCapture } = require('./js/game/creature_ai.js');
@@ -28,11 +29,17 @@ let creatures = [];      // [{data, obj, ai, radius}]
 let roundOver = false;
 let waveSpawned = false;
 let screenState = 'start'; // 'start' | 'dex' | 'play' | 'result'
+let caughtThisRound = 0;   // 本局捕捉数：结算文案判定"全清"
+let fledThisRound = 0;     // 本局逃跑数：结算文案判定"跑光"
 let loopGen = 0;           // AR 会话代际：旧会话回调凭 gen 失配自愈失效
 let currentMode = null;
 let ar = null;             // 每局/每次回前台新建（ar.stop 永久失效，不可复用）
+let scanFallback = false;  // 扫描二次超时后本局强制经典模式（开局重置，下一局重试 VK）
+let scanStartedAt = 0;     // VK 会话开始时刻：看门狗计时基准，0 = 看门狗停表
+let scanToastShown = false; // 首次超时提示只弹一次
 const screens = createScreens({ THREE, bus, config, canvas });
 const effects = createEffects(THREE, scene);
+const aimRing = createAimRing(THREE, scene);
 const thrower = createThrowSystem({ THREE, scene, camera, canvas, config, bus });
 const cameraWorld = new THREE.Vector3();
 
@@ -70,10 +77,19 @@ function spawnWave() {
 function startARSession() { // 每次进对局/回前台都开全新会话：旧会话已被 stop 永久关闭
   loopGen += 1;
   const gen = loopGen; // 捕获代际：被更新的会话顶掉后旧回调立即作废
-  ar = createARContext({ canvas, THREE, renderer, scene, camera, scanTimeoutMs: config.planes.scanTimeoutMs });
-  ar.start().then(({ mode }) => {
+  ar = createARContext({ canvas, THREE, renderer, scene, camera, scanTimeoutMs: config.planes.scanTimeoutMs, preferGyro: scanFallback });
+  ar.start().then(({ mode, reason }) => {
     currentMode = mode;
-    console.log('AR mode:', mode);
+    if (mode === 'vk') { scanStartedAt = Date.now(); scanToastShown = false; } else { scanStartedAt = 0; } // 看门狗只盯 VK 会话
+    screens.setCornerLabel(mode === 'gyro' ? '经典模式' : ''); // 右上角标识：经典模式常驻，VK 擦除
+    if (mode === 'gyro' && reason && reason.indexOf('VK 启动失败') === 0) { // VK 报错多为相机权限被拒：引导去设置开启
+      wx.showModal && wx.showModal({
+        title: '摄像头权限',
+        content: '需要摄像头权限才能开启 AR 模式，可在设置中开启',
+        confirmText: '去设置',
+        success: (r) => { if (r.confirm && wx.openSetting) wx.openSetting({}); },
+      });
+    }
     let lastT = Date.now();
     let acc = 0;
     const frameMs = 1000 / config.fpsCap; // FPS 上限：rAF 回调约 60Hz，不足一帧则跳过（小游戏画布保留上帧）
@@ -86,23 +102,42 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
       const dtMs = Math.min(100, acc); // 本帧推进量 = 距上次“渲染帧”的累计时长
       acc = 0;
 
+      // 扫描看门狗：VK 迟迟锁不到平面 → 先提示换环境，二次超时本局降级经典模式
+      if (currentMode === 'vk' && scanStartedAt) {
+        if (ar.getPlaneAnchor()) {
+          scanStartedAt = 0; // 锚已锁定：看门狗停表（spawnWave 可能因精灵残留不跑，这里直查锚）
+        } else {
+          const elapsed = Date.now() - scanStartedAt;
+          if (elapsed >= config.planes.scanTimeoutMs + config.planes.secondTimeoutMs && !scanFallback) {
+            scanFallback = true; // 二次超时：下次 startARSession 以 preferGyro 强制经典模式
+            ar.stop();
+            loopGen += 1;
+            startARSession();
+            return;
+          } else if (elapsed >= config.planes.scanTimeoutMs && !scanToastShown) {
+            scanToastShown = true;
+            wx.showToast && wx.showToast({ title: '换个亮一点的桌面试试', icon: 'none' });
+          }
+        }
+      }
+
       if (creatures.length === 0 && !roundOver) spawnWave();
 
       // AI：内部维护位置，回调直接写 mesh
       creatures.forEach((c) => c.ai.update(dtMs, (p) => { c.obj.position.x = p.x; c.obj.position.z = p.z; }));
 
       // 目标：离相机最近的精灵
+      let best = null;
       if (creatures.length) {
         cameraWorld.setFromMatrixPosition(camera.matrixWorld);
-        let best = null, bd = 1e9;
+        let bd = 1e9;
         creatures.forEach((c) => {
           const d = c.obj.position.distanceToSquared(cameraWorld);
           if (d < bd) { bd = d; best = c; }
         });
-        thrower.setTarget(best);
-      } else {
-        thrower.setTarget(null);
       }
+      thrower.setTarget(best);
+      aimRing.update(camera, best && screenState === 'play' ? best.obj : null, Date.now() - thrower.getAimStartAt(), config, thrower.hasBallInFlight()); // 瞄准圈与判定共用同一时钟/半径
 
       thrower.update(dtMs);
       effects.update(dtMs);
@@ -110,7 +145,7 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
 
       if (!roundOver && waveSpawned && (creatures.length === 0 || (save.balls <= 0 && !thrower.hasBallInFlight()))) {
         roundOver = true;
-        bus.emit('round:end', { reason: creatures.length === 0 ? 'fled' : 'balls' });
+        bus.emit('round:end', { reason: creatures.length === 0 ? (fledThisRound === 0 ? 'cleared' : 'fled') : 'balls' });
       }
 
       const frame = ar.renderFrame();
@@ -154,6 +189,7 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
     const isNew = !save.dex[id];
     save.dex[id] = { caught: (save.dex[id] ? save.dex[id].caught : 0) + 1, firstAt: Date.now() };
     save.stats.catches += 1;
+    caughtThisRound += 1; // 结算文案用：区分"全清"与"跑光"
     const bonus = eco.applyCatch(save, isNew, config);
     save = bonus.state;
     creatures = creatures.filter((x) => x !== c);
@@ -165,9 +201,11 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
     const { flee } = reactToFailedCapture(c.data, Math.random, config);
     if (flee) {
       creatures = creatures.filter((x) => x !== c);
+      const fpos = c.obj.getWorldPosition(new THREE.Vector3()); // 移除前取世界坐标：逃跑烟尘在其处爆发
+      fledThisRound += 1;
       disposeCreature(c.obj); // 回收 GLB GPU 资源后再移除
       scene.remove(c.obj);
-      bus.emit('creature:fled', { id });
+      bus.emit('creature:fled', { id, pos: fpos });
     } else {
       bus.emit('creature:struggle', { id }); // Task 14 effects 做缩放抖动
     }
@@ -180,6 +218,9 @@ function startRound() { // 开新对局：清场 → 补球 → 重启 AR 会话
   creatures = [];
   roundOver = false;
   waveSpawned = false;
+  caughtThisRound = 0; // 开局清零本局计数
+  fledThisRound = 0;
+  scanFallback = false; // 新的一局重试 VK（上局降级不影响本局）
   save.balls = Math.max(save.balls, config.economy.startBalls);
   store.save(save);
   screens.hide();
@@ -193,14 +234,20 @@ bus.on('creature:caught', (payload) => { // 捕捉成功：粒子爆发 + 预取
   effects.burst(payload.pos);
   prefetchCreatures(THREE);
 });
+bus.on('creature:struggle', ({ id }) => { // 挣扎：缩放抖动反馈（未抓到也未逃跑）
+  const c = creatures.find((x) => x.data.id === id);
+  if (c) effects.shake(c.obj);
+});
+bus.on('creature:fled', ({ pos }) => effects.burst(pos, 0x9aa0a6)); // 逃跑：原地灰色烟尘
 bus.on('round:end', ({ reason }) => {
   thrower.setEnabled(false); // 结算页吞掉触摸，防止误扔球
   screenState = 'result';
   screens.show('result', save, reason);
   ar.stop();
   loopGen += 1; // 立即作废本局循环回调（gyro 的 rAF 永远在重排，stop 杀不死）
+  scanStartedAt = 0; // 看门狗停表（本局循环已死，无帧可跑）
+  aimRing.update(camera, null, 0, config); // 显式隐藏瞄准圈（menuLoop 不跑 update）
   menuLoop();
-  console.log('[round] end — balls:', save.balls, 'caught:', save.stats.catches);
 });
 
 bus.on('ui:tap', ({ tag, state }) => {

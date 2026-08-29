@@ -81,8 +81,22 @@ function createScreens({ THREE, bus, config, canvas }) {
     button(W * 0.52, y2, W * 0.42, px(46), '返回', 'back');
   }
 
+  function setCornerLabel(text) { // 对局中右上角常驻小字：经典模式标识；空串擦除角部
+    if (text) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = px(24) + 'px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, W - px(16), px(40));
+    } else {
+      ctx.clearRect(W - px(160), 0, px(160), px(56)); // 只擦角部，不动整张 HUD
+    }
+    tex.needsUpdate = true;
+  }
+
   function drawResult(save, reason) {
-    label(reason === 'balls' ? '球用完啦！' : '精灵都跑光了', W / 2, H * 0.26, 30, '#ffffff');
+    label(reason === 'balls' ? '球用完啦！' : (reason === 'cleared' ? '全都抓到啦！' : '精灵都跑光了'),
+      W / 2, H * 0.26, 30, '#ffffff');
     label('累计捕捉 ' + save.stats.catches + ' | 命中 ' + save.stats.hits + ' | 出手 ' + save.stats.throws,
       W / 2, H * 0.38, 16, '#dddddd');
     centerBtn(H * 0.55, '再来一局', 'play');
@@ -126,6 +140,7 @@ function createScreens({ THREE, bus, config, canvas }) {
   return {
     show,
     hide,
+    setCornerLabel,
     scene2,
     cam2,
     get visible() { return visible; },

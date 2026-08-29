@@ -25,7 +25,7 @@ npm 不参与构建（three.js 已 vendored 到 `libs/`）。
 
 ## 开发
 
-- `npm test`：Node 内置 test runner，纯逻辑单测 42 个。
+- `npm test`：Node 内置 test runner，纯逻辑单测 45 个。
 - `npm run check`：模块冒烟。
 - 数值全部在 `js/config.js`（经济/捕捉率/瞄准圈/手感/生成权重），调参不用碰逻辑。
 - 精灵模型清单在 `js/render/glb_manifest.js`（CDN GLB，主包不含模型）。
@@ -42,6 +42,7 @@ npm 不参与构建（three.js 已 vendored 到 `libs/`）。
 - VKSession 相机用途需在隐私接口声明（用途：AR 识别平面放置精灵）。
 - 分享文案合规。
 - 首包不含 3D 模型（全部 CDN 加载）。
+- 小程序后台需将 GLB 所在域名（js/render/glb_manifest.js 中的 CDN 域名，当前为 tuanjie-ai-prd.tos-cn-shanghai.volces.com）加入 downloadFile 合法域名；开发工具因 urlCheck:false 不告警，真机未加域名时全部回落占位体
 
 ## 目录结构
 
