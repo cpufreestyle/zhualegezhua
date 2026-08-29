@@ -6,7 +6,9 @@
       { "type": "folder", "value": "tests" },
       { "type": "folder", "value": "scripts" },
       { "type": "file", "value": "package.json" },
-      { "type": "file", "value": ".gitignore" }
+      { "type": "file", "value": ".gitignore" },
+      { "type": "folder", "value": "node_modules" },
+      { "type": "file", "value": ".DS_Store" }
     ]
   },
   "setting": { "urlCheck": false, "es6": true, "minified": true },

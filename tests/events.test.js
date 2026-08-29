@@ -28,4 +28,6 @@ test('emit 时移除监听不影响本次广播（快照）', () => {
   bus.on('e', c);
   bus.emit('e');
   assert.deepStrictEqual(seen, ['a', 'b', 'c']);
+  seen.length = 0; bus.emit('e');
+  assert.deepStrictEqual(seen, ['a', 'b']); // c 已被移除
 });
