@@ -122,6 +122,8 @@ function createScreens({ THREE, bus, config, canvas }) {
   return {
     show,
     hide,
+    scene2,
+    cam2,
     get visible() { return visible; },
   };
 }
