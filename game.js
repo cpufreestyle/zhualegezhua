@@ -36,9 +36,10 @@ ar.start().then(({ mode }) => {
   console.log('AR mode:', mode);
   ar.loop(() => {
     ensureCreature();
-    ar.renderFrame();
-    if (mode === 'vk') renderer.autoClearColor = false; // 相机底图已画，不清屏
+    const frame = ar.renderFrame();
+    if (mode === 'vk' && frame) renderer.autoClearColor = false; // 相机底图已画，不清屏（无底图帧不清屏会糊屏）
     renderer.render(scene, camera);
+    renderer.state.setCullFace(THREE.CullFaceNone); // 官方 demo 同款：背景 quad 不参与背面剔除
   });
 });
 

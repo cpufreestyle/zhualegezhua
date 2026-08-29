@@ -19,10 +19,15 @@ function createGyroAR(canvas, THREE, renderer, scene, camera) {
   camera.position.set(0, 1.4, 0);
   camera.rotation.order = 'YXZ';
   camera.rotation.set(pitch, yaw, 0);
+  // 裸 Camera 是恒等投影矩阵：陀螺仪模式必须自建透视矩阵，否则场景整体被裁成黑屏
+  const fov = 70 * Math.PI / 180, near = 0.01, far = 100;
+  const top = near * Math.tan(fov / 2), h = 2 * top, w = (canvas.width / canvas.height) * h;
+  camera.projectionMatrix.makePerspective(-w / 2, w / 2, top, -top, near, far);
+  camera.projectionMatrixInverse.getInverse(camera.projectionMatrix);
 
   function start() {
     if (typeof wx.onDeviceMotionChange === 'function' && wx.startDeviceMotionListening) {
-      wx.startDeviceMotionListening({ interval: 'game' });
+      wx.startDeviceMotionListening({ interval: 'game', fail: (e) => console.warn('device motion 不可用', e) });
       wx.onDeviceMotionChange((res) => { // alpha 偏航 / beta 俯仰 近似映射，够用于伪 AR
         yaw = -res.alpha * Math.PI / 180;
         pitch = clamp((res.beta - 90) * Math.PI / 180, -1.2, 1.2);
@@ -39,7 +44,7 @@ function createGyroAR(canvas, THREE, renderer, scene, camera) {
       canvas.requestAnimationFrame(onFrame);
     },
     start,
-    stop() { wx.stopDeviceMotionListening && wx.stopDeviceMotionListening(); },
+    stop() { wx.offDeviceMotionChange && wx.offDeviceMotionChange(); wx.stopDeviceMotionListening && wx.stopDeviceMotionListening(); },
   };
 }
 module.exports = { createGyroAR };

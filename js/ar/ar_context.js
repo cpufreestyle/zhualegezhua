@@ -5,7 +5,10 @@ const { createGyroAR } = require('./gyro_cam.js');
 function createARContext({ canvas, THREE, renderer, scene, camera, scanTimeoutMs }) {
   let impl = null;
   let mode = null;
+  let stopped = false; // stop() 竞态闸门：封死“先 stop 后 start”的僵尸会话
+  let timer = null; // 提升到闭包层，stop() 才能取消启动超时计时
   const startGyro = (reason, resolve) => {
+    if (stopped) return;
     impl = createGyroAR(canvas, THREE, renderer, scene, camera);
     mode = 'gyro';
     impl.start().then(() => resolve({ mode, reason }));
@@ -18,12 +21,14 @@ function createARContext({ canvas, THREE, renderer, scene, camera, scanTimeoutMs
           return startGyro('设备不支持 VK', resolve);
         }
         const vk = createVKAR(canvas, THREE, renderer);
-        const timer = setTimeout(() => { // start 迟迟不回调
+        timer = setTimeout(() => { // start 迟迟不回调
+          if (stopped) return;
           if (mode) return;
           try { vk.stop(); } catch (e) { /* 忽略 */ }
           startGyro('VK 启动超时', resolve);
         }, scanTimeoutMs);
         vk.start((err) => {
+          if (stopped) return;
           if (mode) return;
           clearTimeout(timer);
           if (err) return startGyro('VK 启动失败: ' + err, resolve);
@@ -37,7 +42,7 @@ function createARContext({ canvas, THREE, renderer, scene, camera, scanTimeoutMs
     setTracking(v) { if (mode === 'vk') impl.setTracking(v); },
     renderFrame() { return mode === 'vk' ? impl.renderFrame(camera) : impl.renderFrame(); },
     loop(cb) { impl.loop(cb); },
-    stop() { if (impl) impl.stop(); },
+    stop() { stopped = true; clearTimeout(timer); if (impl) impl.stop(); },
   };
 }
 module.exports = { createARContext };

@@ -3,6 +3,7 @@ const NEAR = 0.001;
 const FAR = 1000;
 
 function initCameraQuad(gl) {
+  const currentProgram = gl.getParameter(gl.CURRENT_PROGRAM); // 官方 demo 同款：进出都还原当前 program
   const vs = `
     attribute vec2 a_position;
     attribute vec2 a_texCoord;
@@ -32,9 +33,13 @@ function initCameraQuad(gl) {
     return s;
   };
   const program = gl.createProgram();
-  gl.attachShader(program, compile(gl.VERTEX_SHADER, vs));
-  gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fs));
+  const vertShaderSlot = compile(gl.VERTEX_SHADER, vs);
+  const fragShaderSlot = compile(gl.FRAGMENT_SHADER, fs);
+  gl.attachShader(program, vertShaderSlot);
+  gl.attachShader(program, fragShaderSlot);
   gl.linkProgram(program);
+  gl.deleteShader(vertShaderSlot); // 链接完成后句柄即可释放（官方 demo 同款）
+  gl.deleteShader(fragShaderSlot);
   gl.useProgram(program);
   gl.uniform1i(gl.getUniformLocation(program, 'y_texture'), 5);
   gl.uniform1i(gl.getUniformLocation(program, 'uv_texture'), 6);
@@ -45,17 +50,20 @@ function initCameraQuad(gl) {
   ext.bindVertexArrayOES(vao);
   const posAttr = gl.getAttribLocation(program, 'a_position');
   const pos = gl.createBuffer();
+  vao.posBuffer = pos; // 官方 demo 同款：句柄挂在 VAO 上便于清理
   gl.bindBuffer(gl.ARRAY_BUFFER, pos);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([1, 1, -1, 1, 1, -1, -1, -1]), gl.STATIC_DRAW);
   gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(posAttr);
   const tcAttr = gl.getAttribLocation(program, 'a_texCoord');
   const tc = gl.createBuffer();
+  vao.texcoordBuffer = tc; // 同上
   gl.bindBuffer(gl.ARRAY_BUFFER, tc);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([1, 1, 0, 1, 1, 0, 0, 0]), gl.STATIC_DRAW);
   gl.vertexAttribPointer(tcAttr, 2, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(tcAttr);
   ext.bindVertexArrayOES(null);
+  gl.useProgram(currentProgram);
   return { program, dt, ext, vao };
 }
 
@@ -130,7 +138,11 @@ function createVKAR(canvas, THREE, renderer) {
       return frame;
     },
     loop(cb) {
-      const onFrame = () => { cb(); session.requestAnimationFrame(onFrame); };
+      const onFrame = () => {
+        if (!session) return; // destroy 后一次性干净退出，防 TypeError
+        cb();
+        session.requestAnimationFrame(onFrame);
+      };
       session.requestAnimationFrame(onFrame);
     },
     stop() { try { session.destroy(); } catch (e) { /* 已销毁 */ } session = null; },
