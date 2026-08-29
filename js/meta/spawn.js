@@ -19,7 +19,9 @@ function rollEncounter(creatures, rng, config) {
   for (let i = 0; i < count; i++) {
     const rarity = weightedPick(config.spawn.weights, rng);
     const pool = creatures.filter((c) => c.rarity === rarity);
-    list.push(pool[Math.floor(rng() * pool.length)]);
+    const pick = pool[Math.floor(rng() * pool.length)];
+    if (!pick) continue; // 权重表配置了 CREATURES 没有的稀有度时跳过，防 undefined 入场
+    list.push(pick);
   }
   return list;
 }

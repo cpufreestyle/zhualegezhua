@@ -22,6 +22,7 @@ test('分区判定：越靠圈心评价越高', () => {
 test('退化半径（0/NaN）→ none', () => {
   assert.strictEqual(hc.judgeHit(10, 0, config), 'none');
   assert.strictEqual(hc.judgeHit(10, NaN, config), 'none');
+  assert.strictEqual(hc.judgeHit(10, Infinity, config), 'none');
 });
 
 test('分区边界为闭区间（≤）', () => {

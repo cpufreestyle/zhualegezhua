@@ -5,7 +5,7 @@ function circleRadius(elapsedMs, config) {
   return r1 + (r2 - r1) * p;
 }
 function judgeHit(dist, radius, config) {
-  const ratio = Number.isFinite(radius) ? dist / radius : Infinity;
+  const ratio = Number.isFinite(radius) && radius > 0 ? dist / radius : Infinity;
   const z = config.circle.zones;
   if (ratio <= z.excellent) return 'excellent';
   if (ratio <= z.great) return 'great';

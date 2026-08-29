@@ -7,7 +7,7 @@ function fakeWx() {
   const map = new Map();
   return {
     getStorageSync: (k) => map.get(k),
-    setStorageSync: (k, v) => { map.set(k, v); },
+    setStorageSync: (k, v) => { map.set(k, JSON.parse(JSON.stringify(v))); },
   };
 }
 
