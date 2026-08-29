@@ -1,0 +1,24 @@
+function applyCatch(state, isNewSpecies, config) {
+  const gained = isNewSpecies ? config.economy.newSpeciesBonus : 0;
+  return { gained, state: { ...state, balls: state.balls + gained } };
+}
+function sameDay(a, b) {
+  const da = new Date(a); const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
+function canDailyShare(state, now) {
+  return !state.lastDailyShare || !sameDay(state.lastDailyShare, now);
+}
+function applyDailyShare(state, now, config) {
+  if (!canDailyShare(state, now)) return { ok: false, gained: 0, state };
+  return {
+    ok: true,
+    gained: config.economy.dailyShareBonus,
+    state: { ...state, balls: state.balls + config.economy.dailyShareBonus, lastDailyShare: now },
+  };
+}
+function spendBall(state) {
+  if (state.balls <= 0) return { ok: false, state };
+  return { ok: true, state: { ...state, balls: state.balls - 1 } };
+}
+module.exports = { applyCatch, canDailyShare, applyDailyShare, spendBall, sameDay };
