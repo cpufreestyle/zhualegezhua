@@ -9,4 +9,23 @@ const CREATURES = [
   { id: 'star_dragon', name: '星星龙', rarity: 'legendary', color: 0xb892ff, glbUrl: null },
 ];
 function byId(id) { return CREATURES.find((c) => c.id === id); }
-module.exports = { CREATURES, byId };
+function createPlaceholder(THREE, scene, creature, center) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 16, 16),
+    new THREE.MeshBasicMaterial({ color: creature.color })
+  );
+  body.position.y = 0.18;
+  g.add(body);
+  const earGeo = new THREE.SphereGeometry(0.06, 8, 8);
+  const earMat = new THREE.MeshBasicMaterial({ color: creature.color });
+  [-0.1, 0.1].forEach((x) => {
+    const ear = new THREE.Mesh(earGeo, earMat);
+    ear.position.set(x, 0.34, 0);
+    g.add(ear);
+  });
+  g.position.set(center.x, center.y, center.z);
+  scene.add(g);
+  return g;
+}
+module.exports = { CREATURES, byId, createPlaceholder };
