@@ -22,9 +22,10 @@ test('off 后不再收到', () => {
 test('emit 时移除监听不影响本次广播（快照）', () => {
   const bus = createBus();
   const seen = [];
+  const c = () => seen.push('c');
   bus.on('e', () => seen.push('a'));
-  bus.on('e', () => { seen.push('b'); bus.off('e', () => seen.push('c')); });
-  bus.on('e', () => seen.push('c'));
+  bus.on('e', () => { seen.push('b'); bus.off('e', c); });
+  bus.on('e', c);
   bus.emit('e');
   assert.deepStrictEqual(seen, ['a', 'b', 'c']);
 });
