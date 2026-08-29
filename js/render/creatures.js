@@ -1,3 +1,5 @@
+const { attachCreatureGLB, resolveGlbUrl } = require('./gltf_loader.js');
+
 const CREATURES = [
   { id: 'mochi_cat', name: '麻薯猫', rarity: 'common', color: 0xffc2d1, glbUrl: null },
   { id: 'shiba', name: '小柴犬', rarity: 'common', color: 0xf4a261, glbUrl: null },
@@ -36,4 +38,12 @@ function createPlaceholder(THREE, scene, creature, center) {
   scene.add(g);
   return g;
 }
-module.exports = { CREATURES, byId, createPlaceholder };
+// createCreature — 与 createPlaceholder 同构的生成入口：占位体先立即可见，
+// 有 GLB（creature.glbUrl 或 Task 15 清单）时后台流式加载，就绪后原位替换并淡入
+function createCreature(THREE, scene, creature, center) {
+  const group = createPlaceholder(THREE, scene, creature, center);
+  const url = resolveGlbUrl(creature);
+  if (url) attachCreatureGLB(THREE, group, url);
+  return group;
+}
+module.exports = { CREATURES, byId, createPlaceholder, createCreature };

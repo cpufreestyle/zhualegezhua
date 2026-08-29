@@ -2,7 +2,8 @@
 const config = require('./js/config.js');
 const { createThree } = require('./js/render/three_adapter.js');
 const { createARContext } = require('./js/ar/ar_context.js');
-const { createPlaceholder, CREATURES } = require('./js/render/creatures.js');
+const { createCreature, CREATURES } = require('./js/render/creatures.js');
+const { updateFades, prefetchCreatures } = require('./js/render/gltf_loader.js');
 const { createBus } = require('./js/core/events.js');
 const { rollEncounter } = require('./js/meta/spawn.js');
 const { createRuntime, reactToFailedCapture } = require('./js/game/creature_ai.js');
@@ -59,7 +60,7 @@ function spawnWave() {
       y: center.y,
       z: center.z + (Math.random() - 0.5) * 0.6,
     };
-    const obj = createPlaceholder(THREE, scene, data, home);
+    const obj = createCreature(THREE, scene, data, home);
     const ai = createRuntime(data, { x: home.x, y: home.y, z: home.z }, Math.random, config);
     creatures.push({ data, obj, ai, radius: 0.22 });
   });
@@ -73,13 +74,22 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
   ar.start().then(({ mode }) => {
     currentMode = mode;
     console.log('AR mode:', mode);
+    let lastT = Date.now();
+    let acc = 0;
+    const frameMs = 1000 / config.fpsCap; // FPS 上限：rAF 回调约 60Hz，不足一帧则跳过（小游戏画布保留上帧）
     ar.loop(() => {
       if (gen !== loopGen) return; // 旧会话遗留回调：直接吞掉
+      const now = Date.now();
+      const dtMs = Math.min(100, now - lastT); // 真实帧间隔：切后台巨帧钳到 100ms
+      lastT = now;
+      acc += dtMs;
+      if (acc < frameMs) return; // 未满一帧：本次回调整体放行，游戏体/渲染/相机底图一并定格
+      acc = 0;
 
       if (creatures.length === 0 && !roundOver) spawnWave();
 
       // AI：内部维护位置，回调直接写 mesh
-      creatures.forEach((c) => c.ai.update(33, (p) => { c.obj.position.x = p.x; c.obj.position.z = p.z; }));
+      creatures.forEach((c) => c.ai.update(dtMs, (p) => { c.obj.position.x = p.x; c.obj.position.z = p.z; }));
 
       // 目标：离相机最近的精灵
       if (creatures.length) {
@@ -94,8 +104,9 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
         thrower.setTarget(null);
       }
 
-      thrower.update(33);
-      effects.update(33);
+      thrower.update(dtMs);
+      effects.update(dtMs);
+      updateFades(dtMs); // GLB 换模后的淡入推进
 
       if (!roundOver && waveSpawned && (creatures.length === 0 || (save.balls <= 0 && !thrower.hasBallInFlight()))) {
         roundOver = true;
@@ -113,7 +124,11 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
   });
 }
 
-function menuLoop() { // 菜单/结算页渲染循环：3D 静态底 + HUD 透叠，进对局后自停
+let menuLast = Date.now();
+function menuLoop() { // 菜单/结算页渲染循环：3D 静态底 + HUD 透叠，进对局后自停（保持不封顶：渲染极廉价）
+  const now = Date.now();
+  updateFades(Math.min(100, now - menuLast)); // 结算页仍可能有未完成的模型淡入
+  menuLast = now;
   if (screenState === 'play') return;
   renderer.autoClearColor = true;
   renderer.render(scene, camera);
@@ -172,7 +187,10 @@ function startRound() { // 开新对局：清场 → 补球 → 重启 AR 会话
 }
 
 bus.on('ball:ground', () => {});
-bus.on('creature:caught', (payload) => { effects.burst(payload.pos); });
+bus.on('creature:caught', (payload) => { // 捕捉成功：粒子爆发 + 预取其余精灵 GLB（命中 HTTP 缓存，下次出场即换模）
+  effects.burst(payload.pos);
+  prefetchCreatures(THREE);
+});
 bus.on('round:end', ({ reason }) => {
   thrower.setEnabled(false); // 结算页吞掉触摸，防止误扔球
   screenState = 'result';
