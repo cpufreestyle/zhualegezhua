@@ -8,7 +8,8 @@
       { "type": "file", "value": "package.json" },
       { "type": "file", "value": ".gitignore" },
       { "type": "folder", "value": "node_modules" },
-      { "type": "file", "value": ".DS_Store" }
+      { "type": "file", "value": ".DS_Store" },
+      { "type": "file", "value": "package-lock.json" }
     ]
   },
   "setting": { "urlCheck": false, "es6": true, "minified": true },

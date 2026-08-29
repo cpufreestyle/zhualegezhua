@@ -18,3 +18,14 @@ test('分区判定：越靠圈心评价越高', () => {
   assert.strictEqual(hc.judgeHit(90, 100, config), 'nice');        // 0.90 ≤ 1.0
   assert.strictEqual(hc.judgeHit(120, 100, config), 'none');
 });
+
+test('退化半径（0/NaN）→ none', () => {
+  assert.strictEqual(hc.judgeHit(10, 0, config), 'none');
+  assert.strictEqual(hc.judgeHit(10, NaN, config), 'none');
+});
+
+test('分区边界为闭区间（≤）', () => {
+  assert.strictEqual(hc.judgeHit(35, 100, config), 'excellent');
+  assert.strictEqual(hc.judgeHit(70, 100, config), 'great');
+  assert.strictEqual(hc.judgeHit(100, 100, config), 'nice');
+});

@@ -26,3 +26,7 @@ test('rollFlee 按稀有度概率', () => {
   assert.strictEqual(cr.rollFlee({ rarity: 'legendary' }, () => 0.10, config), true);
   assert.strictEqual(cr.rollFlee({ rarity: 'common' }, () => 0.10, config), false);
 });
+
+test('rng 恰在阈值处不中（< 语义）', () => {
+  assert.strictEqual(cr.rollCapture(creature, 'none', () => 0.65, config), false);
+});
