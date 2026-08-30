@@ -25,6 +25,8 @@ const { THREE, renderer, scene, camera } = createThree(canvas);
 const bus = createBus();
 const store = createStorage(wx, config);
 let save = store.load();
+const ballsMeta = require('./js/meta/balls.js');
+let selectedBall = 'normal'; // 局内当前球种（HUD 切换，Task 6 提供按钮）
 let creatures = [];      // [{data, obj, ai, radius}]
 let roundOver = false;
 let waveSpawned = false;
@@ -143,7 +145,7 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
       effects.update(dtMs);
       updateFades(dtMs); // GLB 换模后的淡入推进
 
-      if (!roundOver && waveSpawned && (creatures.length === 0 || (save.balls <= 0 && !thrower.hasBallInFlight()))) {
+      if (!roundOver && waveSpawned && (creatures.length === 0 || (!ballsMeta.hasAnyBall(save) && !thrower.hasBallInFlight()))) {
         roundOver = true;
         bus.emit('round:end', { reason: creatures.length === 0 ? (fledThisRound === 0 ? 'cleared' : 'fled') : 'balls' });
       }
@@ -173,23 +175,40 @@ function menuLoop() { // 菜单/结算页渲染循环：3D 静态底 + HUD 透�
 }
 
 bus.on('ball:thrown', () => {
-  const r = eco.spendBall(save);
+  const r = ballsMeta.spendBall(save, selectedBall);
   if (!r.ok) return;
   save = r.state;
   save.stats.throws += 1;
+  // 隐藏彩蛋：累计每 10 次出手 +1 甜甜圈球
+  const egg = ballsMeta.donutEasterEgg(save, save.stats.throws);
+  if (egg.granted) {
+    save = egg.state;
+    wx.showToast && wx.showToast({ title: '🍩 出手彩蛋 +1 甜甜圈球', icon: 'none' });
+  }
   store.save(save);
+  bus.emit('hud:refresh');
 });
 
 bus.on('ball:creature', ({ creature, id, zone }) => {
   if (!creatures.includes(creature)) return; // 已被捕获/逃跑的引用忽略
   const c = creature;
   save.stats.hits += 1;
-  const caught = rollCapture(c.data, zone, Math.random, config);
+  const caught = rollCapture(c.data, zone, Math.random, config, selectedBall);
   if (caught) {
     const isNew = !save.dex[id];
     save.dex[id] = { caught: (save.dex[id] ? save.dex[id].caught : 0) + 1, firstAt: Date.now() };
     save.stats.catches += 1;
     caughtThisRound += 1; // 结算文案用：区分"全清"与"跑光"
+    if (c.data.rarity === 'legendary') { // 传说捕获：+1 大师球
+      save = ballsMeta.grantBalls(save, { master: 1 }).state;
+      wx.showToast && wx.showToast({ title: '捕获传说精灵！大师球 +1', icon: 'none' });
+    }
+    const dexCount = Object.keys(save.dex).length;
+    if (dexCount === 8 && !save.dexFullBonus) { // 图鉴全收集：+30 大师球（dex 满后条件天然一次性）
+      save = ballsMeta.grantBalls(save, { master: 30 }).state;
+      save.dexFullBonus = true; // 运行时标记，防同局重复触发 toast
+      wx.showToast && wx.showToast({ title: '图鉴全收集！大师球 +30', icon: 'none' });
+    }
     const bonus = eco.applyCatch(save, isNew, config);
     save = bonus.state;
     creatures = creatures.filter((x) => x !== c);
@@ -207,6 +226,11 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
       scene.remove(c.obj);
       bus.emit('creature:fled', { id, pos: fpos });
     } else {
+      const ballDef = ballsMeta.typeDef(selectedBall, config);
+      if (ballDef.freezeMs > 0) {
+        const frozen = creatures.find((x) => x.data.id === id);
+        if (frozen) frozen.ai.freezeUntil = Date.now() + ballDef.freezeMs; // 甜甜圈球：命中冻结游走
+      }
       bus.emit('creature:struggle', { id }); // Task 14 effects 做缩放抖动
     }
   }
@@ -230,6 +254,16 @@ function startRound() { // 开新对局：清场 → 补球 → 重启 AR 会话
 }
 
 bus.on('ball:ground', () => {});
+bus.on('ball:select', ({ type }) => {
+  const cnt = type === 'master' ? (save.masterBalls || 0) : (type === 'donut' ? (save.donutBalls || 0) : save.balls);
+  if (cnt > 0) {
+    selectedBall = type;
+    thrower.setBallColor(ballsMeta.typeDef(type, config).color);
+    bus.emit('hud:refresh');
+  }
+});
+// 初始球色：白色（normal）
+thrower.setBallColor(ballsMeta.typeDef('normal', config).color);
 bus.on('creature:caught', (payload) => { // 捕捉成功：粒子爆发 + 预取其余精灵 GLB（命中 HTTP 缓存，下次出场即换模）
   effects.burst(payload.pos);
   prefetchCreatures(THREE);

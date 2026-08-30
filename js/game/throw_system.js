@@ -10,6 +10,7 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
   const state = {
     swipeStart: null, ball: null, vel: null, aimStartAt: 0, target: null,
     enabled: true, // Task 14 的 HUD 显示时置 false，吞掉触摸
+    ballColor: 0xffffff, // 当前球色：随选中球种切换（game.js 的 setBallColor 写入），出手时取用
     groundY: 0.02,
     prev: new THREE.Vector3(), tmpA: new THREE.Vector3(), tmpB: new THREE.Vector3(), tmpC: new THREE.Vector3(),
   };
@@ -17,7 +18,7 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
   function spawnBall() {
     const mesh = new THREE.Mesh(
       new THREE.SphereGeometry(BALL_R, 12, 12),
-      new THREE.MeshBasicMaterial({ color: 0xffffff })
+      new THREE.MeshBasicMaterial({ color: state.ballColor })
     );
     mesh.position.set(0, -0.2, -0.3); // 相机稍下方出手
     camera.add(mesh);
@@ -61,6 +62,7 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
     setTarget(t) { state.target = t; },
     setEnabled(v) { state.enabled = v; },
     setGroundY(y) { state.groundY = y; },
+    setBallColor(color) { state.ballColor = color; },
     hasBallInFlight() { return !!state.ball; },
     getAimStartAt() { return state.aimStartAt; }, // 瞄准圈可视化与判定共用同一时钟起点
     update(dtMs) {
