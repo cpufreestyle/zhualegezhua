@@ -2,7 +2,7 @@
 const config = require('./js/config.js');
 const { createThree } = require('./js/render/three_adapter.js');
 const { createARContext } = require('./js/ar/ar_context.js');
-const { createCreature, CREATURES } = require('./js/render/creatures.js');
+const { createCreature, CREATURES, byId } = require('./js/render/creatures.js');
 const { updateFades, prefetchCreatures, disposeCreature } = require('./js/render/gltf_loader.js');
 const { createAimRing } = require('./js/render/aim_ring.js');
 const { createBus } = require('./js/core/events.js');
@@ -26,7 +26,11 @@ const bus = createBus();
 const store = createStorage(wx, config);
 let save = store.load();
 const ballsMeta = require('./js/meta/balls.js');
+const daily = require('./js/meta/daily.js'); // 每日任务：结算页任务区 + 领取
+const nowIso = () => new Date().toISOString(); // 今日 ISO：任务进度/领取共用时间基准
 let selectedBall = 'normal'; // 局内当前球种（HUD 切换，Task 6 提供按钮）
+let lastReason = '';     // 结算原因缓存：任务领取后重绘结算页需复用
+let lastCaughtName = ''; // 最近捕获精灵名：Task 7 捕捉瞬间浮层用
 let creatures = [];      // [{data, obj, ai, radius}]
 let roundOver = false;
 let waveSpawned = false;
@@ -212,6 +216,7 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
     const bonus = eco.applyCatch(save, isNew, config);
     save = bonus.state;
     creatures = creatures.filter((x) => x !== c);
+    lastCaughtName = byId(id).name; // Task 7 捕捉瞬间浮层标题用
     const pos = c.obj.getWorldPosition(new THREE.Vector3()); // 移除前取世界坐标：粒子在其处爆发
     disposeCreature(c.obj); // 回收 GLB GPU 资源后再移除
     scene.remove(c.obj);
@@ -248,6 +253,7 @@ function startRound() { // 开新对局：清场 → 补球 → 重启 AR 会话
   screenState = 'play';
   thrower.setEnabled(true);
   startARSession();
+  screens.drawPlayHud(save, selectedBall); // 局内 HUD 三球条
 }
 
 bus.on('ball:ground', () => {});
@@ -259,6 +265,7 @@ bus.on('ball:select', ({ type }) => {
     bus.emit('hud:refresh');
   }
 });
+bus.on('hud:refresh', () => { if (screenState === 'play') screens.drawPlayHud(save, selectedBall); }); // 局内重绘三球条（出手扣球/切换球种后）
 // 初始球色：白色（normal）
 thrower.setBallColor(ballsMeta.typeDef('normal', config).color);
 bus.on('creature:caught', (payload) => { // 捕捉成功：粒子爆发 + 预取其余精灵 GLB（命中 HTTP 缓存，下次出场即换模）
@@ -271,6 +278,7 @@ bus.on('creature:struggle', ({ id }) => { // 挣扎：缩放抖动反馈（未�
 });
 bus.on('creature:fled', ({ pos }) => effects.burst(pos, 0x9aa0a6)); // 逃跑：原地灰色烟尘
 bus.on('round:end', ({ reason }) => {
+  lastReason = reason; // 缓存结算原因：任务领取后重绘结算页复用
   thrower.setEnabled(false); // 结算页吞掉触摸，防止误扔球
   screenState = 'result';
   screens.show('result', save, reason);
@@ -297,6 +305,19 @@ bus.on('ui:tap', ({ tag, state }) => {
     startRound();
   } else if (state === 'result' && tag === 'dex') {
     screens.show('dex', save);
+  }
+  // 局内球种切换：drawPlayHud 芯片命中（独立 if：不挂在 screenState 链上，tag 自带语义）
+  if (tag && tag.indexOf('ball:') === 0) { bus.emit('ball:select', { type: tag.slice(5) }); return; }
+  // 结算页任务领取：领奖 → 入档 → 重绘结算页（任务行/球数刷新）
+  if (tag && tag.indexOf('claim:') === 0) {
+    const r = daily.claim(save, tag.slice(6), nowIso(), config);
+    if (r.ok) {
+      save = ballsMeta.grantBalls(r.state, r.grant).state;
+      store.save(save);
+      screens.show('result', save, lastReason);
+      wx.showToast && wx.showToast({ title: '任务奖励已领取', icon: 'none' });
+    }
+    return;
   }
 });
 
