@@ -40,3 +40,10 @@ test('typeDef：从 config 取球定义（颜色/倍率/冻结）', () => {
 test('totalBalls：三球总数（HUD 展示用）', () => {
   assert.strictEqual(balls.totalBalls(st()), 8);
 });
+
+test('countOf：单类型计数（HUD 守卫共用）', () => {
+  assert.strictEqual(balls.countOf(st(), 'master'), 2);
+  assert.strictEqual(balls.countOf(st(), 'donut'), 1);
+  assert.strictEqual(balls.countOf(st(), 'normal'), 5);
+  assert.strictEqual(balls.countOf(st({ balls: undefined }), 'normal'), 0);
+});

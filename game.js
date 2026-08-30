@@ -176,7 +176,7 @@ function menuLoop() { // 菜单/结算页渲染循环：3D 静态底 + HUD 透�
 
 bus.on('ball:thrown', () => {
   const r = ballsMeta.spendBall(save, selectedBall);
-  if (!r.ok) return;
+  if (!r.ok) { thrower.cancelBall(); return; } // 扣球失败撤回已生成的球（球先出后扣失败 = 免费投掷）
   save = r.state;
   save.stats.throws += 1;
   // 隐藏彩蛋：累计每 10 次出手 +1 甜甜圈球
@@ -206,7 +206,7 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
     const dexCount = Object.keys(save.dex).length;
     if (dexCount === 8 && !save.dexFullBonus) { // 图鉴全收集：+30 大师球（dex 满后条件天然一次性）
       save = ballsMeta.grantBalls(save, { master: 30 }).state;
-      save.dexFullBonus = true; // 运行时标记，防同局重复触发 toast
+      save.dexFullBonus = true; // 入存档标记：图鉴满 +30 只发一次（重启后不再重发）
       wx.showToast && wx.showToast({ title: '图鉴全收集！大师球 +30', icon: 'none' });
     }
     const bonus = eco.applyCatch(save, isNew, config);
@@ -227,10 +227,7 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
       bus.emit('creature:fled', { id, pos: fpos });
     } else {
       const ballDef = ballsMeta.typeDef(selectedBall, config);
-      if (ballDef.freezeMs > 0) {
-        const frozen = creatures.find((x) => x.data.id === id);
-        if (frozen) frozen.ai.freezeUntil = Date.now() + ballDef.freezeMs; // 甜甜圈球：命中冻结游走
-      }
+      if (ballDef.freezeMs > 0) c.ai.freezeUntil = Date.now() + ballDef.freezeMs; // 甜甜圈球：冻结命中者 c（按 id find 会误冻同种双生）
       bus.emit('creature:struggle', { id }); // Task 14 effects 做缩放抖动
     }
   }
@@ -255,7 +252,7 @@ function startRound() { // 开新对局：清场 → 补球 → 重启 AR 会话
 
 bus.on('ball:ground', () => {});
 bus.on('ball:select', ({ type }) => {
-  const cnt = type === 'master' ? (save.masterBalls || 0) : (type === 'donut' ? (save.donutBalls || 0) : save.balls);
+  const cnt = ballsMeta.countOf(save, type);
   if (cnt > 0) {
     selectedBall = type;
     thrower.setBallColor(ballsMeta.typeDef(type, config).color);

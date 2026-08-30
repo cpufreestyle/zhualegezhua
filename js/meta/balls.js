@@ -3,8 +3,13 @@ function typeDef(type, config) {
   return config.ballTypes[type] || config.ballTypes.normal;
 }
 
+// 单类型计数（HUD 展示与切换守卫共用）
+function countOf(state, type) {
+  return type === 'master' ? (state.masterBalls || 0) : (type === 'donut' ? (state.donutBalls || 0) : (state.balls || 0));
+}
+
 function totalBalls(state) {
-  return (state.balls || 0) + (state.masterBalls || 0) + (state.donutBalls || 0);
+  return countOf(state, 'normal') + countOf(state, 'master') + countOf(state, 'donut');
 }
 
 function hasAnyBall(state) {
@@ -34,4 +39,4 @@ function donutEasterEgg(state, throws) {
   return { granted: false, state };
 }
 
-module.exports = { typeDef, totalBalls, hasAnyBall, spendBall, grantBalls, donutEasterEgg };
+module.exports = { typeDef, countOf, totalBalls, hasAnyBall, spendBall, grantBalls, donutEasterEgg };

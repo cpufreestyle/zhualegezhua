@@ -63,6 +63,14 @@ function createThrowSystem({ THREE, scene, camera, canvas, config, bus }) {
     setEnabled(v) { state.enabled = v; },
     setGroundY(y) { state.groundY = y; },
     setBallColor(color) { state.ballColor = color; },
+    // 扣球失败时撤回已生成的球（球先出后扣失败 = 免费投掷漏洞）；spawnBall 返回 mesh 本体，
+    // 出手时挂 camera、update 首帧转挂 scene，故按实际父级摘除，任一阶段都能正确移除
+    cancelBall() {
+      if (!state.ball) return;
+      if (state.ball.parent) state.ball.parent.remove(state.ball);
+      state.ball = null; // TouchEnd 以 state.ball 为再投闸门：置空后下次滑动可立即重投
+      state.vel = null;
+    },
     hasBallInFlight() { return !!state.ball; },
     getAimStartAt() { return state.aimStartAt; }, // 瞄准圈可视化与判定共用同一时钟起点
     update(dtMs) {
