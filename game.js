@@ -341,11 +341,17 @@ bus.on('ui:tap', ({ tag, state }) => {
     save.stats.shares += 1;
     save = daily.recordProgress(save, 'shares', 1, nowIso(), config).state;
     store.save(save);
-    screens.hide(); // 关浮层回对局（三球条由下次 hud:refresh/出场重绘）
+    screens.hide(); // 关浮层回对局
     thrower.setEnabled(true);
+    screens.drawPlayHud(save, selectedBall); // hide 清了 HUD 画布：立即恢复三球条（否则死区到下次出手）
     return;
   }
-  if (tag === 'continue') { screens.hide(); thrower.setEnabled(true); return; }
+  if (tag === 'continue') {
+    screens.hide();
+    thrower.setEnabled(true);
+    screens.drawPlayHud(save, selectedBall); // 同上：恢复三球条
+    return;
+  }
 });
 
 screens.show('start', save);
