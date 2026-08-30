@@ -1,19 +1,39 @@
 const KEY = 'zlgz_save_v1';
-const VERSION = 1;
+const VERSION = 2;
 
 function defaultState(config) {
   return {
     v: VERSION,
     balls: config.economy.startBalls,
+    masterBalls: 0,
+    donutBalls: 0,
     dex: {},
-    stats: { throws: 0, hits: 0, catches: 0 },
+    stats: { throws: 0, hits: 0, catches: 0, excellentHits: 0, shares: 0 },
     lastDailyShare: null,
+    dailyDate: null,
+    dailyProgress: {},
+    dailyClaimed: {},
+    refBonusClaimed: false,
   };
 }
-// 纯函数：非法/未来版本返回 null，调用方回退默认档；未来加字段在此补迁移步骤
+// 纯函数：非法/未来版本返回 null；v1 → v2 阶梯补字段（未来 v3 在此加下一档）
 function migrate(raw) {
-  if (!raw || typeof raw !== 'object' || raw.v !== VERSION) return null;
-  return raw;
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.v === 2) return raw;
+  if (raw.v === 1) {
+    return {
+      ...raw,
+      v: 2,
+      masterBalls: 0,
+      donutBalls: 0,
+      stats: { throws: 0, hits: 0, catches: 0, excellentHits: 0, shares: 0, ...raw.stats },
+      dailyDate: null,
+      dailyProgress: {},
+      dailyClaimed: {},
+      refBonusClaimed: false,
+    };
+  }
+  return null; // v3+ 未来版本不降级，回默认档
 }
 function createStorage(wxLike, config) {
   return {
