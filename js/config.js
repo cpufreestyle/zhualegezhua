@@ -23,5 +23,6 @@ module.exports = {
       { id: 'share1', desc: '分享 1 次', target: 1, stat: 'shares', reward: { donut: 1 } },
     ],
   },
+  share: { refBonus: 10 },
   fpsCap: 30,
 };

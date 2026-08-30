@@ -58,3 +58,10 @@ test('claim：可领取时发放奖励并置 claimed；不可领取返回 ok:fal
   const notDone = daily.claim(st({ dailyProgress: { catch3: 1 } }), 'catch3', TODAY, config);
   assert.strictEqual(notDone.ok, false); // 未完成
 });
+
+test('recordProgress：完整 ISO 同日多次累计（回归：parse 修复）', () => {
+  let s = { dailyDate: new Date('2026-08-30T10:00:00+08:00').toISOString(), dailyProgress: {}, dailyClaimed: {} };
+  s = daily.recordProgress(s, 'catches', 1, new Date('2026-08-30T10:05:00+08:00').toISOString(), config).state;
+  s = daily.recordProgress(s, 'catches', 1, new Date('2026-08-30T10:09:00+08:00').toISOString(), config).state;
+  assert.strictEqual(s.dailyProgress.catch3, 2); // 修复前这里是 1（每次都被 rollDay 清零）
+});

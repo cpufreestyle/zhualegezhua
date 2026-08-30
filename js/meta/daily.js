@@ -1,8 +1,11 @@
 // js/meta/daily.js — 每日任务：进度记录/跨天重置/状态查询/领取（纯函数）
 // 进度语义：dailyProgress 存"当日事件计数"，由 recordProgress 在事件发生时递增（非 lifetime 差值）
+// 本地日历日比较（parse 后比 y/m/d）：调用方传完整 ISO（含时间），字符串比较会让同日两个时刻永不相等 → 每次都 rollDay 清进度
 function sameDay(dateA, todayIso) {
   if (!dateA) return false;
-  return String(dateA) === String(todayIso);
+  const da = new Date(dateA);
+  const db = new Date(todayIso);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 }
 
 // 返回 { state }（跨天）或 {} 内无 state（同日，调用方判 undefined 跳过）

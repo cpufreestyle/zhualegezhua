@@ -196,6 +196,7 @@ function createScreens({ THREE, bus, config, canvas }) {
     scene2,
     cam2,
     get visible() { return visible; },
+    get state() { return state; }, // 暴露当前屏名：game.js 的 hud:refresh 凭 'moment' 守卫不擦捕捉瞬间浮层
   };
 }
 module.exports = { createScreens };

@@ -28,6 +28,16 @@ let save = store.load();
 const ballsMeta = require('./js/meta/balls.js');
 const daily = require('./js/meta/daily.js'); // 每日任务：结算页任务区 + 领取
 const nowIso = () => new Date().toISOString(); // 今日 ISO：任务进度/领取共用时间基准
+const { createPhoto, applyRefBonus } = require('./js/ui/photo.js'); // 捕捉瞬间截图合成 + 分享 + ref 裂变判定
+const photo = createPhoto({ canvas }); // canvas 顶部已创建，依赖就绪
+try {
+  const ref = applyRefBonus(save, wx.getLaunchOptionsSync && wx.getLaunchOptionsSync().query, config, ballsMeta.grantBalls);
+  if (ref.granted) {
+    save = ref.state;
+    store.save(save);
+    wx.showToast && wx.showToast({ title: '新手礼 +10 球', icon: 'none' });
+  }
+} catch (e) { /* 老环境无 getLaunchOptionsSync：跳过 */ }
 let selectedBall = 'normal'; // 局内当前球种（HUD 切换，Task 6 提供按钮）
 let lastReason = '';     // 结算原因缓存：任务领取后重绘结算页需复用
 let lastCaughtName = ''; // 最近捕获精灵名：Task 7 捕捉瞬间浮层用
@@ -217,6 +227,9 @@ bus.on('ball:creature', ({ creature, id, zone }) => {
     save = bonus.state;
     creatures = creatures.filter((x) => x !== c);
     lastCaughtName = byId(id).name; // Task 7 捕捉瞬间浮层标题用
+    screens.showCatchMoment(save, lastCaughtName); // Task 6 的浮层：拦截触摸（screens.visible → thrower 已禁用路径不变）
+    thrower.setEnabled(false); // 浮层期间禁滑动投掷（浮层按钮可点，关闭时恢复）
+    photo.captureMoment(); // 趁粒子未散截取当前帧（异步 success 回调，但 canvas 内容在下一渲染前稳定）
     const pos = c.obj.getWorldPosition(new THREE.Vector3()); // 移除前取世界坐标：粒子在其处爆发
     disposeCreature(c.obj); // 回收 GLB GPU 资源后再移除
     scene.remove(c.obj);
@@ -265,7 +278,10 @@ bus.on('ball:select', ({ type }) => {
     bus.emit('hud:refresh');
   }
 });
-bus.on('hud:refresh', () => { if (screenState === 'play') screens.drawPlayHud(save, selectedBall); }); // 局内重绘三球条（出手扣球/切换球种后）
+bus.on('hud:refresh', () => {
+  if (screenState !== 'play' || screens.state === 'moment') return; // 捕捉瞬间浮层显示中不重绘三球条（会擦掉浮层）
+  screens.drawPlayHud(save, selectedBall);
+}); // 局内重绘三球条（出手扣球/切换球种后）
 // 初始球色：白色（normal）
 thrower.setBallColor(ballsMeta.typeDef('normal', config).color);
 bus.on('creature:caught', (payload) => { // 捕捉成功：粒子爆发 + 预取其余精灵 GLB（命中 HTTP 缓存，下次出场即换模）
@@ -319,6 +335,17 @@ bus.on('ui:tap', ({ tag, state }) => {
     }
     return;
   }
+  // 捕捉瞬间浮层按钮（一局中途，不能 show('result')——局还没结束）：关浮层回对局
+  if (tag === 'shareMoment') {
+    photo.shareCatchMoment(lastCaughtName);
+    save.stats.shares += 1;
+    save = daily.recordProgress(save, 'shares', 1, nowIso(), config).state;
+    store.save(save);
+    screens.hide(); // 关浮层回对局（三球条由下次 hud:refresh/出场重绘）
+    thrower.setEnabled(true);
+    return;
+  }
+  if (tag === 'continue') { screens.hide(); thrower.setEnabled(true); return; }
 });
 
 screens.show('start', save);
