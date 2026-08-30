@@ -26,3 +26,14 @@ test('运行时状态机：idle → 拾目标 → wander 到位回 idle', () => 
   rt.update(60000, (p) => { pos = p; }); // 足够时间走到目标
   assert.strictEqual(rt.state, 'idle');
 });
+
+test('freezeUntil：冻结期内 wander 不触发，解冻后恢复', () => {
+  // freezeUntil 以真实 Date.now() 语义存储（生产侧甜甜圈球直接写入绝对时间戳），测试也用真实时钟
+  const rt = ai.createRuntime({ rarity: 'common' }, { x: 0, y: 0, z: -2.5 }, () => 0.5, config);
+  rt.freezeUntil = Date.now() + 5000;
+  rt.update(3000, () => {}); // 超过最短 wander 间隔 2000ms，但冻结中
+  assert.strictEqual(rt.state, 'idle'); // 冻结中：不进入 wander
+  rt.freezeUntil = 0; // 解冻
+  rt.update(3000, () => {});
+  assert.strictEqual(rt.state, 'wander'); // 解冻后正常游走
+});

@@ -20,15 +20,18 @@ function createRuntime(creature, home, rng, config) {
   let state = 'idle';
   let waitMs = config.creature.wanderIntervalMs[0]; // 初始等待取最短间隔
   let target = null;
+  let freezeUntil = 0; // 甜甜圈球冻结截止时间戳（Date.now 绝对时间）；0 表示未冻结
   const pos = { x: home.x, z: home.z }; // 当前位置由状态机内部维护（唯一事实源），home 仅作游走锚点
   return {
     get state() { return state; },
     get target() { return target; },
+    get freezeUntil() { return freezeUntil; },
+    set freezeUntil(v) { freezeUntil = v; },
     update(dtMs, applyPos) {
       const step = SPEED * (dtMs / 1000);
       if (state === 'idle') {
         waitMs -= dtMs;
-        if (waitMs <= 0) {
+        if (waitMs <= 0 && Date.now() >= freezeUntil) { // 冻结期不触发新游走（waitMs 继续走，解冻后立刻可触发）
           target = nextWanderTarget(home, config.creature.wanderRadius, rng); // 锚定 spawn 点防漂移
           state = 'wander';
         }
