@@ -17,8 +17,5 @@ function applyDailyShare(state, now, config) {
     state: { ...state, balls: state.balls + config.economy.dailyShareBonus, lastDailyShare: now },
   };
 }
-function spendBall(state) {
-  if (state.balls <= 0) return { ok: false, state };
-  return { ok: true, state: { ...state, balls: state.balls - 1 } };
-}
-module.exports = { applyCatch, canDailyShare, applyDailyShare, spendBall, sameDay };
+// spendBall 已移至 js/meta/balls.js（v0.2 球种系统统一三球消耗），此处不再保留旧的单球版
+module.exports = { applyCatch, canDailyShare, applyDailyShare, sameDay };

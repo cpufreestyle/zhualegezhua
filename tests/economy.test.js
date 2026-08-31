@@ -35,8 +35,4 @@ test('跨天后可再领', () => {
   const tomorrow = '2026-08-29T08:00:00+08:00';
   assert.strictEqual(eco.canDailyShare(st({ lastDailyShare: now }), tomorrow), true);
 });
-
-test('spendBall：有球扣球，没球返回 ok:false', () => {
-  assert.deepStrictEqual(eco.spendBall(st({ balls: 1 })).state.balls, 0);
-  assert.strictEqual(eco.spendBall(st({ balls: 0 })).ok, false);
-});
+// spendBall 测试已随函数迁往 tests/balls.test.js（v0.2 球种统一消耗）
