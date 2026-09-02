@@ -2,18 +2,46 @@
   "description": "抓了个抓 - AR 捕捉微信小游戏",
   "packOptions": {
     "ignore": [
-      { "type": "folder", "value": ".git" },
-      { "type": "folder", "value": "tests" },
-      { "type": "folder", "value": "scripts" },
-      { "type": "file", "value": "package.json" },
-      { "type": "file", "value": ".gitignore" },
-      { "type": "folder", "value": "node_modules" },
-      { "type": "file", "value": ".DS_Store" },
-      { "type": "file", "value": "package-lock.json" }
+      {
+        "type": "folder",
+        "value": ".git"
+      },
+      {
+        "type": "folder",
+        "value": "tests"
+      },
+      {
+        "type": "folder",
+        "value": "scripts"
+      },
+      {
+        "type": "file",
+        "value": "package.json"
+      },
+      {
+        "type": "file",
+        "value": ".gitignore"
+      },
+      {
+        "type": "folder",
+        "value": "node_modules"
+      },
+      {
+        "type": "file",
+        "value": ".DS_Store"
+      },
+      {
+        "type": "file",
+        "value": "package-lock.json"
+      }
     ]
   },
-  "setting": { "urlCheck": false, "es6": true, "minified": true },
-  "compileType": "miniGame",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "minified": true
+  },
+  "compileType": "game",
   "libVersion": "3.3.4",
   "appid": "wx6ac3f5090a6b99c5",
   "projectname": "zhualegezhua",
