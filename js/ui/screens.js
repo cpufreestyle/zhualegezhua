@@ -66,7 +66,7 @@ function createScreens({ THREE, bus, config, canvas }) {
     types.forEach(([type, labelTxt], i) => {
       const x = px(12) + i * px(76);
       const sel = type === selectedBall;
-      ctx.fillStyle = sel ? '#ffd166' : 'rgba(255,255,255,0.25)';
+      ctx.fillStyle = sel ? '#ffd166' : 'rgba(255,255,255,0.4)'; // 未选中芯片提高不透明度：真机相机底图较暗时可读
       ctx.fillRect(x, px(12), px(68), px(30));
       ctx.fillStyle = '#333';
       ctx.textAlign = 'left';
@@ -134,7 +134,7 @@ function createScreens({ THREE, bus, config, canvas }) {
       ctx.textBaseline = 'middle';
       const rewardStr = t.reward.donut ? ('🍩×' + t.reward.donut) : ('球×' + t.reward.balls);
       ctx.fillText((t.claimable ? '● ' : '') + t.desc + '  ' + t.progress + '/' + t.target + '  →' + rewardStr, px(24), y);
-      if (t.claimable) buttons.push({ x: W - px(90), y: y - px(18), w: px(76), h: px(26), tag: 'claim:' + t.id });
+      if (t.claimable) buttons.push({ x: W - px(90), y: y - px(13), w: px(76), h: px(26), tag: 'claim:' + t.id }); // y−13 使按钮垂直中心与行文字中线对齐（原 −18 偏上 5px）
     });
     centerBtn(H * 0.68, '再来一局', 'play');
     centerBtn(H * 0.68 + px(64), '查看图鉴', 'dex');

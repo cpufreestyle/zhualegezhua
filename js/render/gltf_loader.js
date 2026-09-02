@@ -8,6 +8,7 @@ try { GLB_MANIFEST = require('./glb_manifest.js') || {}; } catch (e) { /* Task 1
 
 const FADE_MS = config.creature.fadeMs; // 模型淡入时长
 const LOAD_TIMEOUT_MS = config.creature.loadTimeoutMs; // GLB 加载超时：超时按失败处理，占位体继续顶住
+const RETRY_DELAY_MS = 20000; // GLB 失败后的后台重试间隔：每 URL 只重试一次，不阻塞主流程
 const warned = { loader: false }; // GLTFLoader 不可用时只告警一次，不刷屏
 
 // 尺寸归一：占位体身体球 r=0.18 圆心 y=0.18（跨度 0~0.36），耳朵顶到 0.40，总高约 0.40；
@@ -17,6 +18,7 @@ const MODEL_SCALE = config.creature.scale * config.creature.glbScaleFactor;
 
 const fades = [];            // 淡入补间表 {obj, from, to, t, dur}：模块级复用，完成后尾部换入移除，零逐帧分配
 const prefetched = new Set(); // 已开始加载的 url（含失败，避免反复打扰网络）
+const retried = new Set();    // 已后台重试过的 url：每 URL 只补试一次，防止无限重试风暴
 
 function resolveGlbUrl(creature) { // 优先 creature.glbUrl，其次 Task 15 清单，空串视为无模型
   return creature.glbUrl || GLB_MANIFEST[creature.id] || '';
@@ -35,8 +37,26 @@ function ensureGLTFLoader(THREE) { // 官方 shim 把 GLTFLoader 挂上 THREE �
   return true;
 }
 
+// 确定性失败（网络错误/解析失败）的后台重试：每 URL 只补一次，超时不算失败（请求仍在飞，晚到自会成功）
+function scheduleRetry(THREE, group, glbUrl) {
+  if (retried.has(glbUrl)) return;
+  retried.add(glbUrl);
+  setTimeout(() => { attachCreatureGLB(THREE, group, glbUrl); }, RETRY_DELAY_MS); // 后台补试；再失败即放弃，占位体顶住
+}
+
+// 释放一个未挂进场景的模型（迟到模型防泄漏）
+function disposeDetachedModel(model) {
+  model.traverse((n) => {
+    if (n.geometry) n.geometry.dispose();
+    if (n.material) {
+      const mats = Array.isArray(n.material) ? n.material : [n.material];
+      mats.forEach((m) => { Object.values(m).forEach((v) => { if (v && v.isTexture) v.dispose(); }); m.dispose(); });
+    }
+  });
+}
+
 // 成功：清掉占位体网格（body/ears 是 group 的 children），换入 gltf.scene 并登记 300ms 淡入
-// 失败/超时：保留占位体（游戏继续），不重试、不阻塞主流程
+// 失败：保留占位体（游戏继续），确定性失败后台重试一次，不阻塞主流程
 function attachCreatureGLB(THREE, group, glbUrl, onDone) {
   if (!ensureGLTFLoader(THREE)) return;
   prefetched.add(glbUrl); // 记为已加载/已启动：预取阶段跳过
@@ -46,6 +66,10 @@ function attachCreatureGLB(THREE, group, glbUrl, onDone) {
   }, LOAD_TIMEOUT_MS);
   loader.load(glbUrl, (gltf) => {
     clearTimeout(timer);
+    if (!group.parent) { // 加载期间精灵已被捕获/逃跑（组已脱离场景）：模型无处安放，立即释放防 GPU 泄漏
+      disposeDetachedModel(gltf.scene);
+      return;
+    }
     while (group.children.length) group.remove(group.children[0]);
     const model = gltf.scene;
     model.scale.setScalar(0.01); // 淡入起点，首帧不闪大
@@ -55,7 +79,7 @@ function attachCreatureGLB(THREE, group, glbUrl, onDone) {
     // 补间目标是模型本体而非外层 group：group 定位/寻的由 AI 与投掷系统按原点驱动，保持不动
     fades.push({ obj: model, from: 0.01, to: MODEL_SCALE, t: 0, dur: FADE_MS });
     if (onDone) onDone();
-  }, undefined, () => { clearTimeout(timer); /* 失败保留占位体，静默 */ });
+  }, undefined, () => { clearTimeout(timer); scheduleRetry(THREE, group, glbUrl); /* 确定性失败：占位体顶住，后台补试一次 */ });
 }
 
 function updateFades(dtMs) { // 每帧推进淡入（game.js 主循环调用）；逆序遍历 + 尾部换入移除，零分配

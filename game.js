@@ -159,7 +159,8 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
       effects.update(dtMs);
       updateFades(dtMs); // GLB 换模后的淡入推进
 
-      if (!roundOver && waveSpawned && (creatures.length === 0 || (!ballsMeta.hasAnyBall(save) && !thrower.hasBallInFlight()))) {
+      if (!roundOver && waveSpawned && screens.state !== 'moment' && (creatures.length === 0 || (!ballsMeta.hasAnyBall(save) && !thrower.hasBallInFlight()))) {
+        // screens.state==='moment' 门控：最后一击的捕捉浮层至少完整展示一轮（用户可点分享），结算页延迟到浮层关闭后
         roundOver = true;
         bus.emit('round:end', { reason: creatures.length === 0 ? (fledThisRound === 0 ? 'cleared' : 'fled') : 'balls' });
       }
