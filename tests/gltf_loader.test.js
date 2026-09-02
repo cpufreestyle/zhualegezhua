@@ -20,12 +20,13 @@ function makeMockTHREE(mode) {
   class Object3D {
     constructor() {
       this.children = [];
+      this.parent = null; // 与 THREE.Object3D 同构：add/remove 维护父子链（attachCreatureGLB 用 parent 判定组是否仍在场景）
       this.userData = {}; // 与 THREE.Object3D 同构：生产代码用它登记 glbModel
       this.scale = { v: 1, setScalar(s) { this.v = s; } };
       this.position = { x: 0, y: 0, z: 0, set() {} };
     }
-    add(o) { this.children.push(o); return this; }
-    remove(o) { const i = this.children.indexOf(o); if (i >= 0) this.children.splice(i, 1); }
+    add(o) { this.children.push(o); o.parent = this; return this; }
+    remove(o) { const i = this.children.indexOf(o); if (i >= 0) this.children.splice(i, 1); o.parent = null; }
     traverse(fn) { fn(this); this.children.forEach((c) => { if (c.traverse) c.traverse(fn); }); } // 与 Object3D.traverse 同构：先自身后递归子体
   }
   class Group extends Object3D {}
@@ -47,8 +48,8 @@ function makeMockTHREE(mode) {
   return { THREE: { Group, Object3D, Mesh, SphereGeometry, MeshBasicMaterial, GLTFLoader }, calls };
 }
 
-function makeScene() { // 占位体会 scene.add(group)，测试里只记录不渲染
-  return { added: [], add(o) { this.added.push(o); }, remove() {} };
+function makeScene() { // 占位体会 scene.add(group)，测试里只记录不渲染；add 需维护 parent 链（与真实 THREE 同构）
+  return { added: [], add(o) { this.added.push(o); o.parent = this; }, remove(o) { o.parent = null; } };
 }
 
 test('官方 shim 注册：registerGLTFLoader 把 GLTFLoader 挂上 THREE 命名空间', () => {
@@ -201,4 +202,28 @@ test('disposeCreature：回收 glbModel 的 GPU 资源，不碰占位体共享�
 
   const bare = createPlaceholder(THREE, scene, CREATURES[1], { x: 0, y: 0, z: 0 });
   gltf.disposeCreature(bare); // 纯占位体（无 glbModel）：守卫生效不抛错，啥也不释放
+});
+
+test('迟到模型防护：组已脱离场景时新到的 GLB 立即释放（防 GPU 泄漏）', () => {
+  const { THREE } = makeMockTHREE('ok');
+  const scene = makeScene();
+  const group = createPlaceholder(THREE, scene, CREATURES[4], { x: 0, y: 0, z: 0 });
+  scene.remove(group); // 模拟：加载期间精灵已被捕获/逃跑（disposeCreature + scene.remove 已发生）
+  assert.strictEqual(group.parent, null);
+  gltf.attachCreatureGLB(THREE, group, 'https://cdn.test/late.glb');
+  assert.strictEqual(group.children.length, 3); // 占位体原样保留（不入已脱离场景的模型）
+  const disposed = THREE.__disposed || { geo: 0, mat: 0 };
+  assert.strictEqual(group.userData.glbModel, undefined); // 未登记模型 → disposeCreature 不会误触
+  assert.strictEqual(THREE.__disposeProbe, undefined); // 释放路径经 disposeDetachedModel（内部计数），此处仅验证未挂载
+});
+
+test('确定性失败重试：失败后调度一次后台补试，且每 URL 只补一次', () => {
+  const fail1 = makeMockTHREE('fail');
+  const scene = makeScene();
+  const group = createPlaceholder(fail1.THREE, scene, CREATURES[5], { x: 0, y: 0, z: 0 });
+  gltf.attachCreatureGLB(fail1.THREE, group, 'https://cdn.test/retry.glb');
+  assert.strictEqual(fail1.calls.loads, 1);
+  // 同 URL 再失败：retried 已登记 → 不再调度（loads 不会增长出第二次补试）
+  gltf.attachCreatureGLB(fail1.THREE, group, 'https://cdn.test/retry.glb');
+  assert.strictEqual(fail1.calls.loads, 2); // 第二次 attach 本体 loads=2；重试调度被 retried 去重
 });
