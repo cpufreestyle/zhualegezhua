@@ -137,7 +137,7 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
         }
       }
 
-      if (creatures.length === 0 && !roundOver) spawnWave();
+      if (creatures.length === 0 && !roundOver && screens.state !== 'moment') spawnWave(); // moment 门控同步封 spawnWave：最后一击后浮层展示期间不得偷生新波（否则结算页永远不来）
 
       // AI：内部维护位置，回调直接写 mesh
       creatures.forEach((c) => c.ai.update(dtMs, (p) => { c.obj.position.x = p.x; c.obj.position.z = p.z; }));
