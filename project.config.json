@@ -42,7 +42,7 @@
     "minified": true
   },
   "compileType": "game",
-  "libVersion": "3.3.4",
+  "libVersion": "3.16.2",
   "appid": "wx6ac3f5090a6b99c5",
   "projectname": "zhualegezhua",
   "condition": {}
