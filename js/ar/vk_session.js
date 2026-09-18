@@ -46,6 +46,7 @@ function initCameraQuad(gl) {
   const dt = gl.getUniformLocation(program, 'displayTransform');
 
   const ext = gl.getExtension('OES_vertex_array_object');
+  if (!ext) throw new Error('OES_vertex_array_object 不可用'); // 由 ar_context 捕获 → 降级经典模式（开发者工具/老设备）
   const vao = ext.createVertexArrayOES();
   ext.bindVertexArrayOES(vao);
   const posAttr = gl.getAttribLocation(program, 'a_position');

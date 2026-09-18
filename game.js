@@ -306,7 +306,11 @@ bus.on('round:end', ({ reason }) => {
   menuLoop();
 });
 
-bus.on('ui:tap', ({ tag, state }) => {
+// ui:tap 统一入口：handler 内任何异常都不得静默冻结 UI（曾因 AR 启动抛错导致"点开始没反应"）
+bus.on('ui:tap', (payload) => {
+  try { handleUiTap(payload); } catch (e) { console.error('[ui:tap] 处理异常:', payload && payload.tag, e && e.message); }
+});
+function handleUiTap({ tag, state }) {
   if (state === 'start' && tag === 'play') {
     startRound(); // 内部已含 hide/置 play 态/启用投掷 + 清场重启 AR
   } else if (state === 'start' && tag === 'dex') {
@@ -353,11 +357,13 @@ bus.on('ui:tap', ({ tag, state }) => {
     screens.drawPlayHud(save, selectedBall); // 同上：恢复三球条
     return;
   }
-});
+}
 
 screens.show('start', save);
 thrower.setEnabled(!screens.visible); // HUD 在场时吞触摸（初始即菜单态）
 menuLoop();
+
+wx.onError && wx.onError((e) => { console.error('[onError]', (e && e.message) || e); }); // 运行期异常落日志（工具控制台可见），不静默吞掉
 
 wx.onHide(() => { if (ar) ar.stop(); });
 wx.onShow(() => { if (screenState === 'play') startARSession(); }); // 对局中回前台：全新会话接续
