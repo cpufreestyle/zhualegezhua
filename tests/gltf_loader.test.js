@@ -4,7 +4,20 @@ const assert = require('node:assert');
 
 // libs/gltf-loader.js 在 require 阶段不触 wx（wx.arrayBufferToBase64 仅解析 bufferView 纹理时运行期调用）；
 // 按仓库惯例（scripts/check.js）防御性设置，防官方实现日后把 wx 挪到顶层
-global.wx = global.wx || { arrayBufferToBase64: () => '' };
+// 投影盘/渐变贴图会调 wx.createCanvas + 2d context（小游戏离屏 canvas）→ 最小存根
+function makeCtxStub() {
+  const noop = () => {};
+  return {
+    createLinearGradient: () => ({ addColorStop: noop }),
+    createRadialGradient: () => ({ addColorStop: noop }),
+    fillRect: noop, beginPath: noop, arc: noop, stroke: noop,
+    set fillStyle(v) {}, set strokeStyle(v) {}, set lineWidth(v) {},
+  };
+}
+global.wx = global.wx || {
+  arrayBufferToBase64: () => '',
+  createCanvas: () => ({ width: 0, height: 0, getContext: () => makeCtxStub() }),
+};
 
 const gltf = require('../js/render/gltf_loader.js');
 const { registerGLTFLoader } = require('../libs/gltf-loader.js');
@@ -24,6 +37,7 @@ function makeMockTHREE(mode) {
       this.userData = {}; // 与 THREE.Object3D 同构：生产代码用它登记 glbModel
       this.scale = { v: 1, setScalar(s) { this.v = s; } };
       this.position = { x: 0, y: 0, z: 0, set() {} };
+      this.rotation = { x: 0, y: 0, z: 0, set() {} }; // 投影盘需要 rotation.x（与 THREE.Object3D 同构）
     }
     add(o) { this.children.push(o); o.parent = this; return this; }
     remove(o) { const i = this.children.indexOf(o); if (i >= 0) this.children.splice(i, 1); o.parent = null; }
@@ -34,7 +48,9 @@ function makeMockTHREE(mode) {
     constructor(geo, mat) { super(); this.geometry = geo; this.material = mat; }
   }
   class SphereGeometry { constructor(r) { this.radius = r; } }
-  class MeshBasicMaterial { constructor(opts) { this.color = opts && opts.color; } }
+  class CircleGeometry { constructor(r) { this.radius = r; } } // 投影盘几何
+  class CanvasTexture { constructor(c) { this.image = c; } } // 投影盘/天空地面贴图
+  class MeshBasicMaterial { constructor(opts) { this.color = opts && opts.color; this.map = opts && opts.map; } }
   class GLTFLoader {
     constructor() { GLTFLoader.instances += 1; }
     load(url, onLoad, _onProgress, onError) {
@@ -45,8 +61,11 @@ function makeMockTHREE(mode) {
     }
   }
   GLTFLoader.instances = 0;
-  return { THREE: { Group, Object3D, Mesh, SphereGeometry, MeshBasicMaterial, GLTFLoader }, calls };
+  return { THREE: { Group, Object3D, Mesh, SphereGeometry, CircleGeometry, CanvasTexture, MeshBasicMaterial, GLTFLoader }, calls };
 }
+
+// 取非投影盘子体（占位体身体/耳朵 或 GLB 模型）：投影盘 isShadow 标记，换模时保留
+const nonShadow = (g) => g.children.filter((c) => !(c.userData && c.userData.isShadow));
 
 function makeScene() { // 占位体会 scene.add(group)，测试里只记录不渲染；add 需维护 parent 链（与真实 THREE 同构）
   return { added: [], add(o) { this.added.push(o); o.parent = this; }, remove(o) { o.parent = null; } };
@@ -74,13 +93,13 @@ test('attachCreatureGLB 成功：清占位体子体、挂模型并登记淡入�
   const { THREE } = makeMockTHREE('ok');
   const scene = makeScene();
   const group = createPlaceholder(THREE, scene, CREATURES[0], { x: 1, y: 0, z: 2 });
-  assert.strictEqual(group.children.length, 3); // 身体 + 双耳
+  assert.strictEqual(group.children.length, 4); // 投影盘 + 身体 + 双耳
 
   gltf.attachCreatureGLB(THREE, group, 'https://cdn.test/ok.glb');
 
-  assert.strictEqual(group.children.length, 1); // 占位体网格已清空，仅剩模型
-  assert.strictEqual(group.children[0] instanceof THREE.Object3D, true);
-  const model = group.children[0];
+  assert.strictEqual(group.children.length, 2); // 投影盘保留 + 模型（占位体已清）
+  assert.strictEqual(nonShadow(group)[0] instanceof THREE.Object3D, true);
+  const model = nonShadow(group)[0];
   assert.strictEqual(model.scale.v, 0.01); // 淡入起点，首帧不闪大
 
   gltf.updateFades(150); // 半程
@@ -101,7 +120,7 @@ test('attachCreatureGLB 失败：保留占位体子体，游戏继续', () => {
 
   gltf.attachCreatureGLB(THREE, group, 'https://cdn.test/fail.glb');
 
-  assert.strictEqual(group.children.length, 3); // 子体原样保留
+  assert.strictEqual(group.children.length, 4); // 子体原样保留（含投影盘）
   assert.deepStrictEqual(group.children, before);
   assert.strictEqual(group.children[0] instanceof THREE.Mesh, true); // 仍是占位体身体网格
 });
@@ -111,7 +130,7 @@ test('updateFades：多次小步推进单调增长，完成后出队', () => {
   const scene = makeScene();
   const group = createPlaceholder(THREE, scene, CREATURES[2], { x: 0, y: 0, z: 0 });
   gltf.attachCreatureGLB(THREE, group, 'https://cdn.test/tween.glb');
-  const model = group.children[0];
+  const model = nonShadow(group)[0];
 
   let prev = model.scale.v;
   for (let i = 0; i < 5; i++) { // 5 × 100ms = 500ms > 300ms：中途单调升，末段封顶
@@ -141,7 +160,7 @@ test('GLTFLoader 不可用：attach 静默保留占位体，只告警一次', ()
   const scene = makeScene();
   const group = createPlaceholder(THREE, scene, CREATURES[3], { x: 0, y: 0, z: 0 });
   gltf.attachCreatureGLB(Object.freeze({}), group, 'https://cdn.test/x.glb');
-  assert.strictEqual(group.children.length, 3);
+  assert.strictEqual(group.children.length, 4); // 占位体未动（含投影盘）
 });
 
 test('createCreature：有 url 立即触发后台换模，无 url 保持占位体', () => {
@@ -149,13 +168,13 @@ test('createCreature：有 url 立即触发后台换模，无 url 保持占位�
   const scene1 = makeScene();
   const g1 = createCreature(ok.THREE, scene1, { id: 'mochi_cat', glbUrl: 'https://cdn.test/a.glb', color: 0x112233 }, { x: 0, y: 0, z: 0 });
   assert.strictEqual(ok.calls.loads, 1); // 同步 mock：attach 已完成
-  assert.strictEqual(g1.children.length, 1); // 模型已替换占位体
+  assert.strictEqual(g1.children.length, 2); // 投影盘 + 模型（占位体已替换）
 
   const none = makeMockTHREE('ok');
   const scene2 = makeScene();
   const g2 = createCreature(none.THREE, scene2, { id: 'no_such_id', glbUrl: null, color: 0x445566 }, { x: 0, y: 0, z: 0 });
   assert.strictEqual(none.calls.loads, 0); // 无 url：不触发加载
-  assert.strictEqual(g2.children.length, 3); // 纯占位体
+  assert.strictEqual(g2.children.length, 4); // 纯占位体（投影盘 + 身体 + 双耳）
 });
 
 test('prefetchCreatures：按清单预取剩余 url 且幂等', () => {
@@ -211,7 +230,7 @@ test('迟到模型防护：组已脱离场景时新到的 GLB 立即释放（防
   scene.remove(group); // 模拟：加载期间精灵已被捕获/逃跑（disposeCreature + scene.remove 已发生）
   assert.strictEqual(group.parent, null);
   gltf.attachCreatureGLB(THREE, group, 'https://cdn.test/late.glb');
-  assert.strictEqual(group.children.length, 3); // 占位体原样保留（不入已脱离场景的模型）
+  assert.strictEqual(group.children.length, 4); // 占位体原样保留（不入已脱离场景的模型）
   const disposed = THREE.__disposed || { geo: 0, mat: 0 };
   assert.strictEqual(group.userData.glbModel, undefined); // 未登记模型 → disposeCreature 不会误触
   assert.strictEqual(THREE.__disposeProbe, undefined); // 释放路径经 disposeDetachedModel（内部计数），此处仅验证未挂载

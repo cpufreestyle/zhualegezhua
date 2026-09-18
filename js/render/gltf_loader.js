@@ -1,4 +1,26 @@
 // js/render/gltf_loader.js — GLB 流式加载：占位体立即显示，模型后台替换，失败静默保留
+// 官方 shim 用 wx.arrayBufferToBase64 把 GLB 内嵌贴图转 base64 data URI——该 API 属小程序侧，
+// 小游戏运行时缺失（实测 lib 3.16.2 报 "wx.arrayBufferToBase64 is not a function"）→ 自实现 polyfill。
+// 放在 require 官方 shim 之前：shim 运行期直接引用 wx.arrayBufferToBase64。
+(function polyfillArrayBufferToBase64() {
+  if (typeof wx === 'undefined' || typeof wx.arrayBufferToBase64 === 'function') return;
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  wx.arrayBufferToBase64 = function (buf) {
+    const bytes = new Uint8Array(buf);
+    let out = '';
+    for (let i = 0; i < bytes.length; i += 3) {
+      const b0 = bytes[i];
+      const b1 = bytes[i + 1];
+      const b2 = bytes[i + 2];
+      out += B64[b0 >> 2];
+      out += B64[((b0 & 0x03) << 4) | ((b1 === undefined ? 0 : b1) >> 4)];
+      out += b1 === undefined ? '=' : B64[((b1 & 0x0f) << 2) | ((b2 === undefined ? 0 : b2) >> 6)];
+      out += b2 === undefined ? '=' : B64[b2 & 0x3f];
+    }
+    return out;
+  };
+})();
+
 const config = require('../config.js');
 const { registerGLTFLoader } = require('../../libs/gltf-loader.js');
 
@@ -70,7 +92,10 @@ function attachCreatureGLB(THREE, group, glbUrl, onDone) {
       disposeDetachedModel(gltf.scene);
       return;
     }
-    while (group.children.length) group.remove(group.children[0]);
+    for (let i = group.children.length - 1; i >= 0; i--) { // 只清占位体（身体/耳朵）；投影盘 isShadow 保留（共享资源，不随换模清除）
+      const ch = group.children[i];
+      if (!(ch.userData && ch.userData.isShadow)) group.remove(ch);
+    }
     const model = gltf.scene;
     model.scale.setScalar(0.01); // 淡入起点，首帧不闪大
     model.position.y = 0;
