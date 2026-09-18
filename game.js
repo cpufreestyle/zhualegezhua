@@ -176,6 +176,11 @@ function startARSession() { // 每次进对局/回前台都开全新会话：旧
   });
 }
 
+// 小游戏运行时 rAF 是全局函数（canvas.requestAnimationFrame 不存在）；部分宿主提供 canvas 版，故带回退
+const raf = (typeof requestAnimationFrame === 'function')
+  ? requestAnimationFrame
+  : (cb) => canvas.requestAnimationFrame(cb);
+
 let menuLast = Date.now();
 function menuLoop() { // 菜单/结算页渲染循环：3D 静态底 + HUD 透叠，进对局后自停（保持不封顶：渲染极廉价）
   const now = Date.now();
@@ -186,7 +191,7 @@ function menuLoop() { // 菜单/结算页渲染循环：3D 静态底 + HUD 透�
   renderer.render(scene, camera);
   renderer.autoClearColor = false; // HUD pass 不清色，保住 3D 底
   renderer.render(screens.scene2, screens.cam2);
-  canvas.requestAnimationFrame(menuLoop);
+  raf(menuLoop); // 小游戏 rAF 是全局函数，不是 canvas 方法（误用会导致整个循环不启动）
 }
 
 bus.on('ball:thrown', () => {

@@ -1,4 +1,9 @@
 // js/ar/gyro_cam.js — 降级模式：陀螺仪转视角的虚拟房间（桌面/工具里视角固定）
+// 小游戏 rAF 是全局函数（canvas.requestAnimationFrame 不存在）；部分宿主提供 canvas 版，故带回退
+const raf = (typeof requestAnimationFrame === 'function')
+  ? requestAnimationFrame
+  : (cb) => canvas.requestAnimationFrame(cb);
+
 function createGyroAR(canvas, THREE, renderer, scene, camera) {
   let yaw = 0; let pitch = -0.15; // 固定微俯视
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -40,8 +45,8 @@ function createGyroAR(canvas, THREE, renderer, scene, camera) {
     getSpawnCenter() { return { x: 0, y: 0, z: -2.5 }; }, // 假想地面固定点
     renderFrame() { renderer.autoClearColor = true; return null; },
     loop(cb) {
-      const onFrame = () => { cb(); canvas.requestAnimationFrame(onFrame); };
-      canvas.requestAnimationFrame(onFrame);
+      const onFrame = () => { cb(); raf(onFrame); };
+      raf(onFrame);
     },
     start,
     stop() {
