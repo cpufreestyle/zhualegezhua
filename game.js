@@ -308,7 +308,11 @@ bus.on('round:end', ({ reason }) => {
 
 // ui:tap 统一入口：handler 内任何异常都不得静默冻结 UI（曾因 AR 启动抛错导致"点开始没反应"）
 bus.on('ui:tap', (payload) => {
-  try { handleUiTap(payload); } catch (e) { console.error('[ui:tap] 处理异常:', payload && payload.tag, e && e.message); }
+  try { handleUiTap(payload); } catch (e) {
+    console.error('[ui:tap] 处理异常:', payload && payload.tag, e && e.message);
+    // 诊断期：把异常直接弹到屏幕上（此前静默冻结 UI 导致"点开始没反应"无法定位）
+    wx.showModal && wx.showModal({ title: '操作异常', content: String((e && e.message) || e).slice(0, 200), showCancel: false });
+  }
 });
 function handleUiTap({ tag, state }) {
   if (state === 'start' && tag === 'play') {
@@ -363,7 +367,12 @@ screens.show('start', save);
 thrower.setEnabled(!screens.visible); // HUD 在场时吞触摸（初始即菜单态）
 menuLoop();
 
-wx.onError && wx.onError((e) => { console.error('[onError]', (e && e.message) || e); }); // 运行期异常落日志（工具控制台可见），不静默吞掉
+let errShown = false; // 诊断期：首个运行期异常弹窗提示（只弹一次）
+wx.onError && wx.onError((e) => {
+  const msg = String((e && e.message) || e);
+  console.error('[onError]', msg);
+  if (!errShown) { errShown = true; wx.showModal && wx.showModal({ title: '运行错误', content: msg.slice(0, 200), showCancel: false }); }
+});
 
 wx.onHide(() => { if (ar) ar.stop(); });
 wx.onShow(() => { if (screenState === 'play') startARSession(); }); // 对局中回前台：全新会话接续
